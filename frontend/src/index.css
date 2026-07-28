@@ -74,32 +74,54 @@ h1, h2, h3, h4, .font-heading {
   body { @apply bg-background text-foreground; }
 }
 
-/* Invoice A4 print styles — optimized for B&W printouts */
+/* Invoice A4 print styles — optimized for B&W printouts and single-page fit */
 .a4-page {
   width: 210mm;
   min-height: 297mm;
-  padding: 12mm 14mm;
+  padding: 8mm 10mm;
   background: white;
   color: #0a0a0a;
   font-family: 'Georgia', 'Times New Roman', 'IBM Plex Serif', serif;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.35;
   box-sizing: border-box;
   font-weight: 500;
 }
 .a4-page table { border-collapse: collapse; width: 100%; }
-.a4-page th, .a4-page td { padding: 6px 8px; color: #0a0a0a; }
+.a4-page th, .a4-page td { padding: 4px 6px; color: #0a0a0a; }
 .a4-page th { font-weight: 700; }
 .a4-page .num { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-variant-numeric: tabular-nums; text-align: right; font-weight: 500; }
 .a4-page .text-l { text-align: left; }
 .a4-page .font-mono { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-weight: 600; color: #0a0a0a; }
 .a4-page .font-heading { font-family: 'Georgia', 'Times New Roman', serif; font-weight: 700; }
 
-/* Bump micro-sizes for legibility in print */
-.a4-page .text-\[9px\] { font-size: 10.5px; letter-spacing: 0.02em; }
-.a4-page .text-\[10px\] { font-size: 11.5px; }
-.a4-page .text-\[11px\] { font-size: 12px; }
-.a4-page .text-\[8px\] { font-size: 10px; letter-spacing: 0.03em; }
+/* Compact micro font sizes — legible in print but denser to fit on one page */
+.a4-page .text-\[8px\] { font-size: 9.5px; letter-spacing: 0.02em; }
+.a4-page .text-\[9px\] { font-size: 10px; letter-spacing: 0.02em; }
+.a4-page .text-\[10px\] { font-size: 10.5px; }
+.a4-page .text-\[11px\] { font-size: 11px; }
+.a4-page .text-lg { font-size: 14px; }
+.a4-page .text-xl { font-size: 16px; }
+.a4-page .text-2xl { font-size: 18px; }
+.a4-page .text-base { font-size: 12px; }
+
+/* Compact spacing — squeezes vertical rhythm to keep everything on one page */
+.a4-page .mt-6 { margin-top: 10px; }
+.a4-page .mt-5 { margin-top: 8px; }
+.a4-page .mt-4 { margin-top: 7px; }
+.a4-page .mt-3 { margin-top: 5px; }
+.a4-page .mt-2 { margin-top: 4px; }
+.a4-page .gap-4 { gap: 7px; }
+.a4-page .gap-3 { gap: 6px; }
+.a4-page .p-5 { padding: 7px; }
+.a4-page .p-3 { padding: 5px; }
+.a4-page .p-2 { padding: 4px; }
+.a4-page .py-4 { padding-top: 5px; padding-bottom: 5px; }
+.a4-page .pb-4 { padding-bottom: 6px; }
+.a4-page .pt-4 { padding-top: 6px; }
+.a4-page .pt-2 { padding-top: 4px; }
+.a4-page .h-14 { height: 26px; }
+.a4-page .h-8 { height: 18px; }
 
 /* Force darker text where soft gray was used — critical for grayscale printouts */
 .a4-page .text-slate-400 { color: #334155 !important; }
@@ -107,12 +129,59 @@ h1, h2, h3, h4, .font-heading {
 .a4-page .text-slate-600 { color: #111827 !important; }
 .a4-page .text-slate-700 { color: #0a0a0a !important; }
 .a4-page .text-slate-800, .a4-page .text-slate-900 { color: #000 !important; }
+.a4-page .text-blue-600, .a4-page .text-blue-700 { color: #0a0a0a !important; font-weight: 700; }
+.a4-page .text-sky-300, .a4-page .text-sky-400 { color: #FFFFFF !important; }
+.a4-page .text-amber-700, .a4-page .text-amber-800 { color: #000 !important; font-weight: 700; }
 .a4-page b, .a4-page strong { color: #000; font-weight: 700; }
+
+/* Backgrounds — keep dark backgrounds visible, lighten pastel highlights so text stays readable */
+.a4-page .bg-slate-50 { background-color: #f1f5f9 !important; }
+.a4-page .bg-slate-100 { background-color: #e2e8f0 !important; }
+.a4-page .bg-amber-50 { background-color: #fef3c7 !important; }
+.a4-page .bg-amber-100 { background-color: #fde68a !important; }
+.a4-page .bg-amber-600, .a4-page .bg-amber-700 { background-color: #92400e !important; color: #ffffff !important; }
+.a4-page .bg-\[\#0F172A\] { background-color: #0F172A !important; }
+.a4-page .bg-slate-900 { background-color: #0F172A !important; color: #ffffff !important; }
+.a4-page .bg-blue-600 { background-color: #0F172A !important; color: #ffffff !important; }
+
+/* Ensure text-white stays white on dark backgrounds after other overrides */
+.a4-page .text-white { color: #ffffff !important; }
+
+/* CRITICAL: When a cell / mono span lives inside a dark-bg container, force white so
+   `.a4-page td` (#0a0a0a) and `.a4-page .font-mono` (#0a0a0a) do not render invisible
+   text on dark backgrounds (Grand Total rows, invoice-number chips, dark table headers). */
+.a4-page .bg-slate-900 td,
+.a4-page .bg-slate-900 th,
+.a4-page .bg-slate-900 .num,
+.a4-page .bg-slate-900 .font-mono,
+.a4-page .bg-slate-900 span,
+.a4-page .bg-slate-900 div,
+.a4-page .bg-blue-600 td,
+.a4-page .bg-blue-600 th,
+.a4-page .bg-blue-600 .num,
+.a4-page .bg-blue-600 .font-mono,
+.a4-page .bg-blue-600 span,
+.a4-page .bg-blue-600 div,
+.a4-page .bg-\[\#0F172A\] td,
+.a4-page .bg-\[\#0F172A\] th,
+.a4-page .bg-\[\#0F172A\] .num,
+.a4-page .bg-\[\#0F172A\] .font-mono,
+.a4-page .bg-\[\#0F172A\] span,
+.a4-page .bg-\[\#0F172A\] div,
+.a4-page .bg-amber-600 td,
+.a4-page .bg-amber-600 th,
+.a4-page .bg-amber-600 .num,
+.a4-page .bg-amber-600 .font-mono,
+.a4-page .bg-amber-700 td,
+.a4-page .bg-amber-700 th,
+.a4-page .bg-amber-700 .num,
+.a4-page .bg-amber-700 .font-mono { color: #ffffff !important; }
 
 /* Ensure borders are dark enough to print visibly */
 .a4-page .border-slate-200 { border-color: #64748b !important; }
 .a4-page .border-slate-300 { border-color: #334155 !important; }
 .a4-page .border-slate-400 { border-color: #1f2937 !important; }
+.a4-page .border-amber-600, .a4-page .border-amber-700 { border-color: #1f2937 !important; }
 
 .animate-fade-up { animation: fadeUp 400ms ease-out both; }
 @keyframes fadeUp {

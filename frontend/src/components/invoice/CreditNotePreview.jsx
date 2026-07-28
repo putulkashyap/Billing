@@ -24,8 +24,11 @@ export default function CreditNotePreview({ creditNote, onClose }) {
   const download = async () => {
     if (!printRef.current) return;
     setBusy(true);
+    const el = printRef.current;
+    const originalMinHeight = el.style.minHeight;
+    el.style.minHeight = "auto";
     try {
-      const canvas = await html2canvas(printRef.current, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
       const pageWmm = 210;
       const pageHmm = 297;
@@ -33,8 +36,9 @@ export default function CreditNotePreview({ creditNote, onClose }) {
       const pageHpx = Math.floor(pageHmm * pxPerMm);
       let renderedPx = 0;
       let pageIndex = 0;
-      while (renderedPx < canvas.height) {
+      while (renderedPx < canvas.height - 1) {
         const sliceHpx = Math.min(pageHpx, canvas.height - renderedPx);
+        if (pageIndex > 0 && sliceHpx < pxPerMm * 20) break;
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;
         pageCanvas.height = sliceHpx;
@@ -50,7 +54,10 @@ export default function CreditNotePreview({ creditNote, onClose }) {
         pageIndex += 1;
       }
       pdf.save(`${cn.credit_note_number.replace(/\//g, "_")}.pdf`);
-    } finally { setBusy(false); }
+    } finally {
+      el.style.minHeight = originalMinHeight;
+      setBusy(false);
+    }
   };
 
   return (

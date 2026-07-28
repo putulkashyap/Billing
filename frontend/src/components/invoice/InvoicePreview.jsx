@@ -24,8 +24,12 @@ export default function InvoicePreview({ invoice, onClose }) {
   const download = async () => {
     if (!printRef.current) return;
     setBusy(true);
+    const el = printRef.current;
+    const originalMinHeight = el.style.minHeight;
+    // Collapse min-height so canvas captures only real content (no trailing blank page)
+    el.style.minHeight = "auto";
     try {
-      const canvas = await html2canvas(printRef.current, {
+      const canvas = await html2canvas(el, {
         scale: 2,
         useCORS: true,
         backgroundColor: "#ffffff",
@@ -39,8 +43,10 @@ export default function InvoicePreview({ invoice, onClose }) {
       // True multi-page: slice source canvas into page-sized chunks
       let renderedPx = 0;
       let pageIndex = 0;
-      while (renderedPx < canvas.height) {
+      while (renderedPx < canvas.height - 1) {
         const sliceHpx = Math.min(pageHpx, canvas.height - renderedPx);
+        // Skip trailing near-empty slices (< 20mm of content)
+        if (pageIndex > 0 && sliceHpx < pxPerMm * 20) break;
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;
         pageCanvas.height = sliceHpx;
@@ -60,7 +66,10 @@ export default function InvoicePreview({ invoice, onClose }) {
         pageIndex += 1;
       }
       pdf.save(`${invoice.invoice_number.replace(/\//g, "_")}.pdf`);
-    } finally { setBusy(false); }
+    } finally {
+      el.style.minHeight = originalMinHeight;
+      setBusy(false);
+    }
   };
 
   const Template = tpl === "gem" ? GemTemplate : tpl === "modern" ? ModernTemplate : CompactTemplate;
