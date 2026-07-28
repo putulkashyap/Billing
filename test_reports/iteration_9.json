@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 9 major expansion tested end-to-end. Backend: 16/16 pytest passed for Expenses CRUD+payments+RBAC, Uploads (PDF accepted, .exe/oversized rejected, file served), Reports (aging bucket + days_overdue accurate for TE/2026-27/0001, GST settlement ITC math, P&L populated, Balance Sheet identity holds within 0.05), and WhatsApp reminder deep link (wa.me, bank details, invoice number in message). Frontend: Login, Expenses (add dialog fills correctly, preview total ₹1,180.00, row appears with expected data), Reports (FY-2026-27 preset resolves to 2026-04-01→2027-03-31 exactly, all 3 tabs render, gst-net-total renders ₹6,562.37), Reconciliation aging cards show correct amounts (0-30=₹44,200, others ₹0). ONE CRITICAL FRONTEND BUG: whatsapp-remind-{inv_no} and email-remind-{inv_no} buttons are NOT wired in Reconciliation row — handlers sendWhatsAppReminder / sendEmailReminder exist (lines 56-71) but there is no <button> in the row action cell (line 183-187) calling them. All disposable data cleaned.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Reconciliation.jsx row action cell", "issue": "WhatsApp and Email reminder buttons are missing from unpaid invoice rows. sendWhatsAppReminder and sendEmailReminder handlers exist but no <button data-testid=\\\"whatsapp-remind-{inv_no}\\\"> nor <button data-testid=\\\"email-remind-{inv_no}\\\"> is rendered. Only 'Log Payment' button is shown.", "selector": "[data-testid='whatsapp-remind-TE/2026-27/0001']", "priority": "HIGH"},
+      {"component": "Expenses.jsx row delete button", "issue": "Delete (Trash2 icon) button has no data-testid — hard to target from tests. Suggested: data-testid={`expense-delete-${e.bill_number}`}.", "selector": "expense-delete-*", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_expansion_iter9.py",
+    "/app/test_reports/pytest/iter9_backend.xml"
+  ],
+  "action_items": [
+    "Add whatsapp-remind-{inv_no} and email-remind-{inv_no} buttons in Reconciliation.jsx row action cell (~line 183). Only render when inv.status !== 'paid'. Email button only when inv.customer?.email exists.",
+    "Add data-testid to the Trash2 delete button in Expenses row (~line 182) for testability."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1102 lines — approaching split threshold (>700). Consider modularising into routers/ (auth, invoices, expenses, uploads, reports).",
+    "GET /api/uploads/{fid} is public (no auth) — acceptable given unguessable UUID filenames, but document this choice.",
+    "compute_expense_totals treats 'discount' as absent; ExpenseLine has no discount field. OK for MVP; note asymmetry vs invoice LineItem which supports discount.",
+    "Balance sheet accounting identity holds because proprietor_capital is derived as (Assets - Liab - RE). This is a plug figure, not a real capital account. Fine for MVP but flag for real accounting later.",
+    "P&L expense categorisation: COGS heuristic ('Raw Material' + 'Logistics') is hard-coded. Consider making category-to-COGS mapping configurable.",
+    "gst-settlement includes ALL invoices when no date filter provided — fine, but Reports.jsx should always pass from/to."
+  ],
+  "updated_files": ["/app/backend/tests/test_expansion_iter9.py (new)"],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "90% (WhatsApp/Email reminder buttons missing)"},
+  "test_credentials": "Admin hi@trayambak.in / Ranjita@1985 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Disposable expenses (TEST_Vendor_GJ, TEST_ITC_Vendor, V-QA-*) and one PDF upload were created during tests and DELETED after. Uploads directory cleaned. TE/2026-27/0001 invoice preserved and untouched. Ephemeral test staff user teststaff+<ts>@trayambak.in created and deleted.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All backend endpoints for iter-9 expansion work correctly. Preview state at test end: 1 invoice (TE/2026-27/0001, balance 44200, pending), 0 expenses, 0 credit notes, 0 uploaded files on disk, invoice counter seq=1. Only remaining functional gap is the two missing reminder buttons in Reconciliation.jsx row action cell. After main agent wires them (should be a ~5 line change), retest with a quick playwright click on whatsapp-remind-TE/2026-27/0001 (should open new tab to wa.me/...) and email-remind-TE/2026-27/0001 (mailto:).",
+  "rca of the issue": "Reconciliation.jsx: developer wrote the two async handlers (sendWhatsAppReminder line 56-62, sendEmailReminder line 64-71) but forgot to add the corresponding <button> elements in the tbody row action cell (line 180-187). Only the 'Log Payment' button was wired. Fix: inside the row action <td>, add e.g.:\n  {inv.status !== 'paid' && <button data-testid={`whatsapp-remind-${inv.invoice_number}`} onClick={() => sendWhatsAppReminder(inv)} className='text-emerald-600 text-xs ml-2'>WhatsApp</button>}\n  {inv.customer?.email && <button data-testid={`email-remind-${inv.invoice_number}`} onClick={() => sendEmailReminder(inv)} className='text-slate-600 text-xs ml-2'>Email</button>}"
+}

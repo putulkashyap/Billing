@@ -9,18 +9,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { StatusPill } from "./Dashboard";
-import { Wallet, Search, TrendingUp } from "lucide-react";
+import { Wallet, Search, TrendingUp, AlertTriangle, MessageCircle, Mail, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Reconciliation() {
   const [invoices, setInvoices] = useState([]);
+  const [aging, setAging] = useState(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [payOpen, setPayOpen] = useState(false);
   const [target, setTarget] = useState(null);
   const [payment, setPayment] = useState({ amount: 0, payment_date: todayISO(), method: "Bank Transfer", reference: "", notes: "" });
 
-  const load = () => api.get("/invoices").then((r) => setInvoices(r.data));
+  const load = () => {
+    api.get("/invoices").then((r) => setInvoices(r.data));
+    api.get("/reports/aging").then((r) => setAging(r.data)).catch(() => {});
+  };
   useEffect(() => { load(); }, []);
 
   const totals = useMemo(() => {
@@ -47,6 +51,23 @@ export default function Reconciliation() {
     setTarget(inv);
     setPayment({ amount: inv.balance, payment_date: todayISO(), method: "Bank Transfer", reference: "", notes: "" });
     setPayOpen(true);
+  };
+
+  const sendWhatsAppReminder = async (inv) => {
+    try {
+      const r = await api.get(`/reminders/whatsapp/${inv.id}`);
+      window.open(r.data.whatsapp_url, "_blank");
+      if (!r.data.phone) toast.info("Add customer phone to auto-fill the WhatsApp recipient.");
+    } catch (e) { toast.error("Could not prepare reminder"); }
+  };
+
+  const sendEmailReminder = async (inv) => {
+    try {
+      const r = await api.get(`/reminders/whatsapp/${inv.id}`);
+      const subj = encodeURIComponent(`Payment reminder — Invoice ${inv.invoice_number}`);
+      const body = encodeURIComponent(r.data.message);
+      window.location.href = `mailto:${r.data.email || ""}?subject=${subj}&body=${body}`;
+    } catch (e) { toast.error("Could not prepare reminder"); }
   };
 
   const submitPay = async () => {
@@ -85,6 +106,34 @@ export default function Reconciliation() {
           </Card>
         ))}
       </div>
+
+      {/* Aging Analysis */}
+      {aging && (
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 mb-3">Outstanding Aging Analysis</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {["0-30", "31-60", "60+"].map((k) => {
+              const b = aging.buckets[k] || { count: 0, amount: 0, invoices: [] };
+              const overdue = k !== "0-30";
+              return (
+                <Card key={k} className={`p-5 rounded-md ${overdue && b.amount > 0 ? "border-amber-300 bg-amber-50" : "border-slate-200"}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {overdue && b.amount > 0 ? <AlertTriangle className="w-4 h-4 text-amber-600" /> : <Clock className="w-4 h-4 text-slate-500" />}
+                      <span className="text-xs uppercase tracking-wider text-slate-600">{k} days</span>
+                    </div>
+                    <span className="text-xs text-slate-500 font-mono">{b.count} inv.</span>
+                  </div>
+                  <div className="mt-3 text-2xl font-mono font-semibold" data-testid={`aging-${k}`}>{fmtINRWithSymbol(b.amount)}</div>
+                  {overdue && b.amount > 0 && (
+                    <div className="mt-2 text-xs text-amber-700 font-medium">Payment overdue</div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <Card className="p-4 border-slate-200 rounded-md flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px]">

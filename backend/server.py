@@ -1,6 +1,8 @@
 """TRAYAMBAK ENTERPRISE — GST Billing & Reconciliation Backend."""
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -9,12 +11,16 @@ import logging
 import uuid
 import bcrypt
 import jwt
+import mimetypes
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import List, Optional, Literal
 from datetime import datetime, timezone, timedelta
+from urllib.parse import quote
 
 ROOT_DIR = Path(__file__).parent
+UPLOAD_DIR = ROOT_DIR / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 load_dotenv(ROOT_DIR / '.env')
 
 mongo_url = os.environ['MONGO_URL']
@@ -634,6 +640,449 @@ async def summary(user=Depends(get_current_user)):
 @api.get("/")
 async def root():
     return {"app": "Trayambak Enterprise GST Billing API", "status": "ok"}
+
+
+# ================== EXPENSES / VENDOR BILLS ==================
+EXPENSE_CATEGORIES = ["Raw Material", "Logistics", "Office Overhead", "Bank Charges", "Utilities", "Professional Fees", "Marketing", "Other"]
+
+
+class ExpenseLine(BaseModel):
+    description: str
+    hsn: Optional[str] = ""
+    quantity: float = 1.0
+    unit: str = "Nos"
+    rate: float
+    tax_rate: float = 18.0
+    price_type: Literal["exclusive", "inclusive"] = "exclusive"
+
+
+class Attachment(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    filename: str
+    url: str
+    content_type: Optional[str] = ""
+    size: int = 0
+    uploaded_at: str = Field(default_factory=now_iso)
+
+
+class Expense(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_name: str
+    vendor_gstin: Optional[str] = ""
+    bill_number: str
+    bill_date: str
+    category: str = "Other"
+    line_items: List[dict] = []
+    subtotal: float = 0.0
+    taxable_amount: float = 0.0
+    cgst: float = 0.0
+    sgst: float = 0.0
+    igst: float = 0.0
+    total_tax: float = 0.0
+    grand_total: float = 0.0
+    is_intra_state: bool = True
+    itc_eligible: bool = True
+    notes: Optional[str] = ""
+    attachments: List[dict] = []
+    status: Literal["pending", "partially_paid", "paid"] = "pending"
+    amount_paid: float = 0.0
+    balance: float = 0.0
+    payments: List[dict] = []
+    created_by: str = ""
+    created_at: str = Field(default_factory=now_iso)
+
+
+class ExpenseCreate(BaseModel):
+    vendor_name: str
+    vendor_gstin: Optional[str] = ""
+    bill_number: str
+    bill_date: str
+    category: str = "Other"
+    line_items: List[ExpenseLine]
+    itc_eligible: bool = True
+    notes: Optional[str] = ""
+    attachments: List[dict] = []
+
+
+def compute_expense_totals(vendor_gstin: str, items: List[ExpenseLine]) -> dict:
+    intra = is_gujarat_gstin(vendor_gstin or "")
+    subtotal = 0.0
+    taxable = 0.0
+    cgst = sgst = igst = 0.0
+    for it in items:
+        gross = it.quantity * it.rate
+        subtotal += gross
+        if it.price_type == "inclusive":
+            line_taxable = gross / (1 + it.tax_rate / 100.0) if it.tax_rate else gross
+            tax_amt = gross - line_taxable
+        else:
+            line_taxable = gross
+            tax_amt = line_taxable * (it.tax_rate / 100.0)
+        taxable += line_taxable
+        if intra:
+            cgst += tax_amt / 2
+            sgst += tax_amt / 2
+        else:
+            igst += tax_amt
+    total_tax = cgst + sgst + igst
+    r = lambda x: round(x, 2)
+    return {
+        "subtotal": r(subtotal),
+        "taxable_amount": r(taxable),
+        "cgst": r(cgst),
+        "sgst": r(sgst),
+        "igst": r(igst),
+        "total_tax": r(total_tax),
+        "grand_total": r(taxable + total_tax),
+        "is_intra_state": intra,
+    }
+
+
+@api.get("/expenses")
+async def list_expenses(user=Depends(get_current_user)):
+    docs = await db.expenses.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return docs
+
+
+@api.get("/expenses/categories")
+async def list_categories(user=Depends(get_current_user)):
+    return {"categories": EXPENSE_CATEGORIES}
+
+
+@api.post("/expenses")
+async def create_expense(inp: ExpenseCreate, user=Depends(get_current_user)):
+    totals = compute_expense_totals(inp.vendor_gstin or "", inp.line_items)
+    doc = Expense(
+        vendor_name=inp.vendor_name,
+        vendor_gstin=inp.vendor_gstin or "",
+        bill_number=inp.bill_number,
+        bill_date=inp.bill_date,
+        category=inp.category,
+        line_items=[li.model_dump() for li in inp.line_items],
+        itc_eligible=inp.itc_eligible,
+        notes=inp.notes or "",
+        attachments=inp.attachments or [],
+        created_by=user["id"],
+        balance=totals["grand_total"],
+        **totals,
+    ).model_dump()
+    await db.expenses.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/expenses/{eid}")
+async def update_expense(eid: str, inp: ExpenseCreate, user=Depends(get_current_user)):
+    exp = await db.expenses.find_one({"id": eid})
+    if not exp:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    if exp.get("status") == "paid":
+        raise HTTPException(status_code=400, detail="Paid expenses cannot be edited")
+    totals = compute_expense_totals(inp.vendor_gstin or "", inp.line_items)
+    amount_paid = float(exp.get("amount_paid", 0.0))
+    balance = round(totals["grand_total"] - amount_paid, 2)
+    status_str = "paid" if balance <= 0.001 else ("partially_paid" if amount_paid > 0 else "pending")
+    upd = {
+        "vendor_name": inp.vendor_name,
+        "vendor_gstin": inp.vendor_gstin or "",
+        "bill_number": inp.bill_number,
+        "bill_date": inp.bill_date,
+        "category": inp.category,
+        "line_items": [li.model_dump() for li in inp.line_items],
+        "itc_eligible": inp.itc_eligible,
+        "notes": inp.notes or "",
+        "attachments": inp.attachments or [],
+        "balance": max(balance, 0.0),
+        "status": status_str,
+        **totals,
+    }
+    await db.expenses.update_one({"id": eid}, {"$set": upd})
+    doc = await db.expenses.find_one({"id": eid}, {"_id": 0})
+    return doc
+
+
+@api.delete("/expenses/{eid}")
+async def delete_expense(eid: str, user=Depends(require_admin)):
+    r = await db.expenses.delete_one({"id": eid})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    return {"ok": True}
+
+
+@api.post("/expenses/{eid}/payments")
+async def add_expense_payment(eid: str, inp: PaymentCreate, user=Depends(get_current_user)):
+    exp = await db.expenses.find_one({"id": eid})
+    if not exp:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    pay = Payment(**inp.model_dump())
+    new_paid = round(float(exp.get("amount_paid", 0.0)) + pay.amount, 2)
+    grand = float(exp["grand_total"])
+    balance = round(grand - new_paid, 2)
+    status_str = "paid" if balance <= 0.001 else "partially_paid"
+    if balance <= 0.001:
+        balance = 0.0
+    await db.expenses.update_one(
+        {"id": eid},
+        {"$push": {"payments": pay.model_dump()},
+         "$set": {"amount_paid": new_paid, "balance": balance, "status": status_str}},
+    )
+    doc = await db.expenses.find_one({"id": eid}, {"_id": 0})
+    return doc
+
+
+# ================== UPLOADS / DOCUMENT VAULT ==================
+ALLOWED_MIME = {"application/pdf", "image/png", "image/jpeg", "image/jpg", "image/webp"}
+MAX_UPLOAD_MB = 10
+
+
+@api.post("/uploads")
+async def upload_file(file: UploadFile = File(...), user=Depends(get_current_user)):
+    ct = (file.content_type or "").lower()
+    if ct not in ALLOWED_MIME:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ct}. Allowed: PDF, PNG, JPG, WebP")
+    contents = await file.read()
+    size = len(contents)
+    if size > MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File exceeds {MAX_UPLOAD_MB} MB")
+    ext = (file.filename.rsplit(".", 1)[-1] if "." in file.filename else mimetypes.guess_extension(ct) or "bin").lower()
+    fid = f"{uuid.uuid4().hex}.{ext}"
+    fpath = UPLOAD_DIR / fid
+    with open(fpath, "wb") as f:
+        f.write(contents)
+    url = f"/api/uploads/{fid}"
+    return {
+        "id": fid,
+        "filename": file.filename,
+        "url": url,
+        "content_type": ct,
+        "size": size,
+        "uploaded_at": now_iso(),
+    }
+
+
+@api.get("/uploads/{fid}")
+async def get_upload(fid: str):
+    # Public access to uploaded files (URL is unguessable UUID)
+    fpath = UPLOAD_DIR / fid
+    if not fpath.exists() or ".." in fid or "/" in fid:
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(str(fpath))
+
+
+@api.post("/invoices/{iid}/attachments")
+async def attach_to_invoice(iid: str, attachment: Attachment, user=Depends(get_current_user)):
+    inv = await db.invoices.find_one({"id": iid})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    await db.invoices.update_one({"id": iid}, {"$push": {"attachments": attachment.model_dump()}})
+    return {"ok": True}
+
+
+@api.delete("/invoices/{iid}/attachments/{aid}")
+async def detach_from_invoice(iid: str, aid: str, user=Depends(get_current_user)):
+    await db.invoices.update_one({"id": iid}, {"$pull": {"attachments": {"id": aid}}})
+    return {"ok": True}
+
+
+# ================== FINANCIAL REPORTS ==================
+def parse_date(s: Optional[str]) -> Optional[str]:
+    if not s:
+        return None
+    return s[:10]
+
+
+@api.get("/reports/aging")
+async def aging_report(user=Depends(get_current_user)):
+    """Categorize outstanding invoices into 0-30, 31-60, 60+ day buckets."""
+    today = datetime.now(timezone.utc).date()
+    docs = await db.invoices.find({"status": {"$ne": "paid"}}, {"_id": 0}).to_list(5000)
+    buckets = {"0-30": {"count": 0, "amount": 0.0, "invoices": []},
+               "31-60": {"count": 0, "amount": 0.0, "invoices": []},
+               "60+": {"count": 0, "amount": 0.0, "invoices": []}}
+    for d in docs:
+        try:
+            inv_date = datetime.fromisoformat(d.get("invoice_date", "")).date() if len(d.get("invoice_date", "")) >= 10 else today
+        except Exception:
+            inv_date = today
+        days = (today - inv_date).days
+        key = "0-30" if days <= 30 else ("31-60" if days <= 60 else "60+")
+        buckets[key]["count"] += 1
+        buckets[key]["amount"] = round(buckets[key]["amount"] + float(d.get("balance", 0.0)), 2)
+        buckets[key]["invoices"].append({
+            "id": d.get("id"),
+            "invoice_number": d.get("invoice_number"),
+            "customer": d.get("customer", {}).get("name", ""),
+            "customer_phone": d.get("customer", {}).get("phone", ""),
+            "customer_email": d.get("customer", {}).get("email", ""),
+            "invoice_date": d.get("invoice_date"),
+            "grand_total": d.get("grand_total", 0.0),
+            "balance": d.get("balance", 0.0),
+            "days_overdue": days,
+            "status": d.get("status"),
+        })
+    return {
+        "as_of": today.isoformat(),
+        "buckets": buckets,
+        "total_outstanding": round(sum(b["amount"] for b in buckets.values()), 2),
+    }
+
+
+@api.get("/reports/gst-settlement")
+async def gst_settlement(from_date: Optional[str] = None, to_date: Optional[str] = None,
+                         user=Depends(get_current_user)):
+    """Compute Net GST Liability = Output GST (from invoices - credit notes) - ITC (from ITC-eligible expenses)."""
+    inv_q = {}
+    exp_q = {}
+    if from_date:
+        inv_q.setdefault("invoice_date", {})["$gte"] = from_date
+        exp_q.setdefault("bill_date", {})["$gte"] = from_date
+    if to_date:
+        inv_q.setdefault("invoice_date", {})["$lte"] = to_date
+        exp_q.setdefault("bill_date", {})["$lte"] = to_date
+    cn_q = {}
+    if from_date:
+        cn_q.setdefault("credit_date", {})["$gte"] = from_date
+    if to_date:
+        cn_q.setdefault("credit_date", {})["$lte"] = to_date
+    invs = await db.invoices.find(inv_q, {"_id": 0}).to_list(5000)
+    cns = await db.credit_notes.find(cn_q, {"_id": 0}).to_list(5000)
+    exps = await db.expenses.find(exp_q, {"_id": 0}).to_list(5000)
+    r = lambda x: round(x, 2)
+    out_cgst = r(sum(i.get("cgst", 0) for i in invs) - sum(c.get("cgst", 0) for c in cns))
+    out_sgst = r(sum(i.get("sgst", 0) for i in invs) - sum(c.get("sgst", 0) for c in cns))
+    out_igst = r(sum(i.get("igst", 0) for i in invs) - sum(c.get("igst", 0) for c in cns))
+    itc_cgst = r(sum(e.get("cgst", 0) for e in exps if e.get("itc_eligible", True)))
+    itc_sgst = r(sum(e.get("sgst", 0) for e in exps if e.get("itc_eligible", True)))
+    itc_igst = r(sum(e.get("igst", 0) for e in exps if e.get("itc_eligible", True)))
+    net_cgst = r(out_cgst - itc_cgst)
+    net_sgst = r(out_sgst - itc_sgst)
+    net_igst = r(out_igst - itc_igst)
+    return {
+        "from_date": from_date,
+        "to_date": to_date,
+        "output_gst": {"cgst": out_cgst, "sgst": out_sgst, "igst": out_igst, "total": r(out_cgst + out_sgst + out_igst)},
+        "input_tax_credit": {"cgst": itc_cgst, "sgst": itc_sgst, "igst": itc_igst, "total": r(itc_cgst + itc_sgst + itc_igst)},
+        "net_liability": {"cgst": net_cgst, "sgst": net_sgst, "igst": net_igst, "total": r(net_cgst + net_sgst + net_igst)},
+    }
+
+
+@api.get("/reports/pnl")
+async def pnl_report(from_date: Optional[str] = None, to_date: Optional[str] = None,
+                     user=Depends(get_current_user)):
+    """Profit & Loss for a period."""
+    inv_q, exp_q, cn_q = {}, {}, {}
+    if from_date:
+        inv_q.setdefault("invoice_date", {})["$gte"] = from_date
+        exp_q.setdefault("bill_date", {})["$gte"] = from_date
+        cn_q.setdefault("credit_date", {})["$gte"] = from_date
+    if to_date:
+        inv_q.setdefault("invoice_date", {})["$lte"] = to_date
+        exp_q.setdefault("bill_date", {})["$lte"] = to_date
+        cn_q.setdefault("credit_date", {})["$lte"] = to_date
+    invs = await db.invoices.find(inv_q, {"_id": 0}).to_list(5000)
+    cns = await db.credit_notes.find(cn_q, {"_id": 0}).to_list(5000)
+    exps = await db.expenses.find(exp_q, {"_id": 0}).to_list(5000)
+    r = lambda x: round(x, 2)
+    gross_revenue = r(sum(i.get("taxable_amount", 0) for i in invs) - sum(c.get("taxable_amount", 0) for c in cns))
+    # Aggregate expenses by category
+    expense_by_cat = {}
+    for e in exps:
+        cat = e.get("category", "Other")
+        expense_by_cat[cat] = r(expense_by_cat.get(cat, 0) + float(e.get("taxable_amount", 0)))
+    # COGS = Raw Material + Logistics (simple heuristic)
+    cogs = r(expense_by_cat.get("Raw Material", 0) + expense_by_cat.get("Logistics", 0))
+    op_expenses = r(sum(v for k, v in expense_by_cat.items() if k not in ("Raw Material", "Logistics")))
+    gross_profit = r(gross_revenue - cogs)
+    net_profit = r(gross_profit - op_expenses)
+    margin = round((net_profit / gross_revenue * 100), 2) if gross_revenue > 0 else 0.0
+    return {
+        "from_date": from_date,
+        "to_date": to_date,
+        "gross_revenue": gross_revenue,
+        "cogs": cogs,
+        "gross_profit": gross_profit,
+        "operating_expenses": op_expenses,
+        "expense_breakdown": expense_by_cat,
+        "net_profit": net_profit,
+        "net_margin_percent": margin,
+    }
+
+
+@api.get("/reports/balance-sheet")
+async def balance_sheet(as_of: Optional[str] = None, user=Depends(get_current_user)):
+    """Simple Balance Sheet snapshot."""
+    ao = as_of[:10] if as_of else datetime.now(timezone.utc).date().isoformat()
+    inv_q = {"invoice_date": {"$lte": ao}}
+    exp_q = {"bill_date": {"$lte": ao}}
+    cn_q = {"credit_date": {"$lte": ao}}
+    invs = await db.invoices.find(inv_q, {"_id": 0}).to_list(5000)
+    cns = await db.credit_notes.find(cn_q, {"_id": 0}).to_list(5000)
+    exps = await db.expenses.find(exp_q, {"_id": 0}).to_list(5000)
+    r = lambda x: round(x, 2)
+    # Cash/Bank = payments received - payments paid out
+    cash = r(sum(i.get("amount_paid", 0) for i in invs) - sum(e.get("amount_paid", 0) for e in exps))
+    accounts_receivable = r(sum(i.get("balance", 0) for i in invs))
+    accounts_payable = r(sum(e.get("balance", 0) for e in exps))
+    itc_balance = r(sum(e.get("cgst", 0) + e.get("sgst", 0) + e.get("igst", 0) for e in exps if e.get("itc_eligible", True)))
+    gst_output = r(sum(i.get("total_tax", 0) for i in invs) - sum(c.get("total_tax", 0) for c in cns))
+    gst_payable = r(max(gst_output - itc_balance, 0))
+    total_assets = r(cash + accounts_receivable + max(itc_balance - gst_output, 0))
+    total_liabilities = r(accounts_payable + gst_payable)
+    # P&L (approx, all-time up to as_of)
+    revenue = r(sum(i.get("taxable_amount", 0) for i in invs) - sum(c.get("taxable_amount", 0) for c in cns))
+    expenses_total = r(sum(e.get("taxable_amount", 0) for e in exps))
+    retained_earnings = r(revenue - expenses_total)
+    proprietor_capital = r(total_assets - total_liabilities - retained_earnings)
+    return {
+        "as_of": ao,
+        "assets": {
+            "cash_bank": cash,
+            "accounts_receivable": accounts_receivable,
+            "input_tax_credit": max(itc_balance - gst_output, 0),
+            "total": total_assets,
+        },
+        "liabilities": {
+            "accounts_payable": accounts_payable,
+            "gst_payable": gst_payable,
+            "total": total_liabilities,
+        },
+        "equity": {
+            "proprietor_capital": proprietor_capital,
+            "retained_earnings": retained_earnings,
+            "total": r(proprietor_capital + retained_earnings),
+        },
+    }
+
+
+@api.get("/reminders/whatsapp/{iid}")
+async def whatsapp_reminder(iid: str, user=Depends(get_current_user)):
+    """Generate a WhatsApp deep link with a pre-drafted payment reminder for a customer."""
+    inv = await db.invoices.find_one({"id": iid}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    phone = (inv.get("customer", {}) or {}).get("phone", "").strip()
+    phone_digits = "".join(c for c in phone if c.isdigit())
+    if phone_digits and not phone_digits.startswith("91"):
+        phone_digits = "91" + phone_digits[-10:]
+    msg = (
+        f"Dear {inv.get('customer',{}).get('name','Customer')},\n\n"
+        f"This is a friendly reminder from TRAYAMBAK ENTERPRISE regarding invoice "
+        f"{inv.get('invoice_number')} dated {inv.get('invoice_date')}.\n\n"
+        f"Outstanding balance: INR {inv.get('balance', 0):.2f}\n"
+        f"Bank: IDFC FIRST | A/C 69315494820 | IFSC IDFB0042392\n\n"
+        f"Please arrange payment at your earliest convenience. Thank you!\n\n"
+        f"— hi@trayambak.in"
+    )
+    encoded = quote(msg)
+    wa_url = f"https://wa.me/{phone_digits}?text={encoded}" if phone_digits else f"https://wa.me/?text={encoded}"
+    return {
+        "whatsapp_url": wa_url,
+        "phone": phone,
+        "email": (inv.get("customer", {}) or {}).get("email", ""),
+        "invoice_number": inv.get("invoice_number"),
+        "message": msg,
+    }
 
 
 app.include_router(api)

@@ -13,6 +13,8 @@ import Reconciliation from "@/pages/Reconciliation";
 import Staff from "@/pages/Staff";
 import CreditNotes from "@/pages/CreditNotes";
 import CreditNoteForm from "@/pages/CreditNoteForm";
+import Expenses from "@/pages/Expenses";
+import Reports from "@/pages/Reports";
 import Layout from "@/components/Layout";
 
 function Protected({ children }) {
@@ -38,6 +40,8 @@ function App() {
             <Route path="/invoices/:id/edit" element={<Protected><InvoiceForm /></Protected>} />
             <Route path="/credit-notes" element={<Protected><CreditNotes /></Protected>} />
             <Route path="/credit-notes/new" element={<Protected><CreditNoteForm /></Protected>} />
+            <Route path="/expenses" element={<Protected><Expenses /></Protected>} />
+            <Route path="/reports" element={<Protected><Reports /></Protected>} />
             <Route path="/customers" element={<Protected><Customers /></Protected>} />
             <Route path="/reconciliation" element={<Protected><Reconciliation /></Protected>} />
             <Route path="/staff" element={<Protected><Staff /></Protected>} />
