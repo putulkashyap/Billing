@@ -14,6 +14,7 @@ const COMPANY = {
   gstin: "24AMAPR1170Q1ZT",
   address: "3rd Floor, C8-301, Akshar Pavilion, Vasna Bhayli Main Road, Opp Rosedale Heights, Vadodara, Gujarat - 391410",
   email: "hi@trayambak.in",
+  website: "www.trayambak.in",
 };
 
 export default function CreditNotePreview({ creditNote, onClose }) {
@@ -99,7 +100,7 @@ function CreditNoteBody({ cn }) {
         <div>
           <LogoSVG width={220} height={50} />
           <div className="mt-2 text-[10px] text-slate-600 max-w-xs leading-snug">{COMPANY.address}</div>
-          <div className="text-[10px] mt-1"><b>GSTIN:</b> <span className="font-mono">{COMPANY.gstin}</span> · <b>Email:</b> {COMPANY.email}</div>
+          <div className="text-[10px] mt-1"><b>GSTIN:</b> <span className="font-mono">{COMPANY.gstin}</span> · <b>Email:</b> {COMPANY.email} · <b>Web:</b> {COMPANY.website}</div>
         </div>
         <div className="text-right">
           <div className="inline-block bg-amber-100 text-amber-800 px-3 py-1 text-xs uppercase tracking-[0.2em] font-semibold rounded">Credit Note</div>
@@ -118,6 +119,7 @@ function CreditNoteBody({ cn }) {
           <div className="text-[10px] mt-1 leading-snug">{COMPANY.address}</div>
           <div className="text-[10px] mt-1"><b>GSTIN:</b> <span className="font-mono">{COMPANY.gstin}</span></div>
           <div className="text-[10px]"><b>Email:</b> {COMPANY.email}</div>
+          <div className="text-[10px]"><b>Website:</b> {COMPANY.website}</div>
         </div>
         <div className="border border-slate-300 p-3">
           <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">Bill To / Consignee</div>

@@ -6,14 +6,8 @@ const COMPANY = {
   gstin: "24AMAPR1170Q1ZT",
   address: "3rd Floor, C8-301, Akshar Pavilion, Vasna Bhayli Main Road, Opp Rosedale Heights, Vadodara, Gujarat - 391410",
   email: "hi@trayambak.in",
-  bank: {
-    holder: "TRAYAMBAK ENTERPRISE",
-    name: "IDFC FIRST Bank",
-    branch: "Vadodara-Gotri",
-    ac: "69315494820",
-    type: "Current",
-    ifsc: "IDFB0042392",
-  },
+  website: "www.trayambak.in",
+  bank: { holder: "TRAYAMBAK ENTERPRISE", name: "IDFC FIRST Bank", branch: "Vadodara-Gotri", ac: "69315494820", type: "Current", ifsc: "IDFB0042392" },
 };
 
 export default function CompactTemplate({ invoice }) {
@@ -31,7 +25,7 @@ export default function CompactTemplate({ invoice }) {
           <div>
             <div className="text-base font-heading font-bold tracking-tight">{COMPANY.name}</div>
             <div className="text-[9px] text-slate-600 max-w-md leading-snug">{COMPANY.address}</div>
-            <div className="text-[9px] mt-0.5">GSTIN <span className="font-mono">{COMPANY.gstin}</span> · {COMPANY.email}</div>
+            <div className="text-[9px] mt-0.5">GSTIN <span className="font-mono">{COMPANY.gstin}</span> · {COMPANY.email} · {COMPANY.website}</div>
           </div>
         </div>
         <div className="text-right">

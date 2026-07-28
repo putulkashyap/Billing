@@ -7,6 +7,7 @@ const COMPANY = {
   gstin: "24AMAPR1170Q1ZT",
   address: "3rd Floor, C8-301, Akshar Pavilion, Vasna Bhayli Main Road, Opp Rosedale Heights, Vadodara, Gujarat - 391410",
   email: "hi@trayambak.in",
+  website: "www.trayambak.in",
   bank: {
     holder: "TRAYAMBAK ENTERPRISE",
     name: "IDFC FIRST Bank",
@@ -26,7 +27,7 @@ export default function ModernTemplate({ invoice }) {
         <div className="flex-1 bg-[#0F172A] text-white p-5">
           <LogoDark width={200} height={46} />
           <div className="mt-3 text-[10px] text-slate-300 leading-snug">{COMPANY.address}</div>
-          <div className="text-[10px] mt-1 text-slate-300">GSTIN <span className="font-mono text-sky-300">{COMPANY.gstin}</span> · {COMPANY.email}</div>
+          <div className="text-[10px] mt-1 text-slate-300">GSTIN <span className="font-mono text-sky-300">{COMPANY.gstin}</span> · {COMPANY.email} · {COMPANY.website}</div>
         </div>
         <div className="w-64 bg-blue-600 text-white p-5 flex flex-col justify-between">
           <div>

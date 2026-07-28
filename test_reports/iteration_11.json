@@ -1,0 +1,29 @@
+{
+  "summary": "Verified website address 'www.trayambak.in' is present on all 3 invoice templates and Credit Note preview for invoice TE/2026-27/0001. All checks PASS. Regression: invoice number/date, bank details, cheque note, GRAND TOTAL all still render correctly. Disposable credit note created for CN preview verification was cleaned up and the credit_note_2026-27 counter reset to 0 in MongoDB.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verification_details": {
+    "Government_Supply_template": "PASS – Header shows 'GSTIN: 24AMAPR1170Q1ZT · Email: hi@trayambak.in · Web: www.trayambak.in' and Supplier/Seller box has 'Website: www.trayambak.in' (2 occurrences on template).",
+    "Modern_Corporate_template": "PASS – Dark header info block shows 'GSTIN 24AMAPR1170Q1ZT · hi@trayambak.in · www.trayambak.in'.",
+    "Compact_Single_Page_template": "PASS – Top company strip shows 'GSTIN 24AMAPR1170Q1ZT · hi@trayambak.in · www.trayambak.in'.",
+    "CreditNotePreview": "PASS – Header line shows 'Web: www.trayambak.in' and Supplier/Seller box has 'Website: www.trayambak.in' (2 occurrences).",
+    "Regression": "PASS – Invoice # TE/2026-27/0001, Date 2026-07-22, IDFC FIRST Bank details, 'Please make cheques in favor of TRAYAMBAK ENTERPRISE', GRAND TOTAL ₹ 44,200.00 all rendered correctly with no layout misalignment."
+  },
+  "cleanup_performed": "Disposable credit note TE/CN/2026-27/0001 (reason=TEST_DISPOSABLE_CN) deleted from db.credit_notes; counter credit_note_2026-27 reset from seq=1 to seq=0 in test_database.counters. User's TE/2026-27/0001 invoice untouched.",
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "COMPANY constant with website is duplicated across 4 templates (GemTemplate, ModernTemplate, CompactTemplate, CreditNotePreview). Consider extracting to a shared /components/invoice/companyConstants.js to keep future edits DRY."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "test_credentials": "hi@trayambak.in / Ranjita@1985",
+  "seed_data_creation": "Temporarily created 1 credit note for CN preview verification; deleted immediately after test and counter reset.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "www.trayambak.in text addition verified across all 3 invoice templates + credit note preview on invoice TE/2026-27/0001. No functional/API impact. Clean state (no leftover CNs, counter=0)."
+}
