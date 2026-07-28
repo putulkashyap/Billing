@@ -169,6 +169,7 @@ class Invoice(BaseModel):
     notes: Optional[str] = ""
     status: Literal["pending", "partially_paid", "paid"] = "pending"
     amount_paid: float = 0.0
+    credits_applied: float = 0.0
     balance: float = 0.0
     payments: List[dict] = []
     created_by: str = ""
@@ -194,6 +195,38 @@ class PaymentCreate(BaseModel):
     payment_date: str
     method: str = "Bank Transfer"
     reference: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+class CreditNote(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    credit_note_number: str
+    invoice_id: str
+    invoice_number: str
+    credit_date: str
+    reason: str = ""
+    customer: dict  # snapshot from invoice
+    line_items: List[dict]
+    subtotal: float
+    total_discount: float
+    taxable_amount: float
+    cgst: float
+    sgst: float
+    igst: float
+    total_tax: float
+    grand_total: float
+    is_intra_state: bool
+    notes: Optional[str] = ""
+    created_by: str = ""
+    created_at: str = Field(default_factory=now_iso)
+
+
+class CreditNoteCreate(BaseModel):
+    invoice_id: str
+    credit_date: str
+    reason: str = ""
+    line_items: List[LineItem]
     notes: Optional[str] = ""
 
 
@@ -237,6 +270,14 @@ def compute_invoice_totals(customer: dict, items: List[LineItem]) -> dict:
 
 
 async def next_invoice_number() -> str:
+    return await _next_number("invoice", "TE")
+
+
+async def next_credit_note_number() -> str:
+    return await _next_number("credit_note", "TE/CN")
+
+
+async def _next_number(prefix_key: str, display_prefix: str) -> str:
     # Fiscal year: Apr-Mar
     today = datetime.now(timezone.utc)
     year = today.year
@@ -246,7 +287,7 @@ async def next_invoice_number() -> str:
     else:
         fy_start, fy_end = year - 1, year
     fy = f"{fy_start}-{str(fy_end)[2:]}"
-    counter_key = f"invoice_{fy}"
+    counter_key = f"{prefix_key}_{fy}"
     doc = await db.counters.find_one_and_update(
         {"_id": counter_key},
         {"$inc": {"seq": 1}},
@@ -254,7 +295,7 @@ async def next_invoice_number() -> str:
         return_document=True,
     )
     seq = doc.get("seq", 1)
-    return f"TE/{fy}/{seq:04d}"
+    return f"{display_prefix}/{fy}/{seq:04d}"
 
 
 # ---------- Startup: seed admin ----------
@@ -276,6 +317,7 @@ async def on_startup():
     # ensure indexes
     await db.users.create_index("email", unique=True)
     await db.invoices.create_index("invoice_number", unique=True)
+    await db.credit_notes.create_index("credit_note_number", unique=True)
 
 
 # ---------- Auth routes ----------
@@ -420,11 +462,12 @@ async def add_payment(iid: str, inp: PaymentCreate, user=Depends(get_current_use
     pay = Payment(**inp.model_dump())
     new_paid = round(float(inv.get("amount_paid", 0.0)) + pay.amount, 2)
     grand = float(inv["grand_total"])
-    balance = round(grand - new_paid, 2)
+    credits = float(inv.get("credits_applied", 0.0))
+    balance = round(grand - new_paid - credits, 2)
     if balance <= 0.001:
         status_str = "paid"
         balance = 0.0
-    elif new_paid > 0:
+    elif new_paid > 0 or credits > 0:
         status_str = "partially_paid"
     else:
         status_str = "pending"
@@ -439,16 +482,128 @@ async def add_payment(iid: str, inp: PaymentCreate, user=Depends(get_current_use
     return doc
 
 
+@api.put("/invoices/{iid}")
+async def update_invoice(iid: str, inp: InvoiceCreate, user=Depends(get_current_user)):
+    inv = await db.invoices.find_one({"id": iid})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if inv.get("status") == "paid":
+        raise HTTPException(status_code=400, detail="Paid invoices cannot be edited")
+    totals = compute_invoice_totals(inp.customer, inp.line_items)
+    amount_paid = float(inv.get("amount_paid", 0.0))
+    credits = float(inv.get("credits_applied", 0.0))
+    balance = round(totals["grand_total"] - amount_paid - credits, 2)
+    if balance <= 0.001:
+        status_str = "paid"
+        balance = 0.0
+    elif amount_paid > 0 or credits > 0:
+        status_str = "partially_paid"
+    else:
+        status_str = "pending"
+    update = {
+        "order_type": inp.order_type,
+        "gem_contract_no": inp.gem_contract_no or "",
+        "gem_order_date": inp.gem_order_date or "",
+        "buyer_department": inp.buyer_department or "",
+        "delivery_date": inp.delivery_date or "",
+        "po_number": inp.po_number or "",
+        "reference_date": inp.reference_date or "",
+        "invoice_date": inp.invoice_date,
+        "customer": inp.customer,
+        "line_items": [li.model_dump() for li in inp.line_items],
+        "notes": inp.notes or "",
+        "balance": balance,
+        "status": status_str,
+        **totals,
+    }
+    await db.invoices.update_one({"id": iid}, {"$set": update})
+    doc = await db.invoices.find_one({"id": iid}, {"_id": 0})
+    return doc
+
+
+# ---------- Credit Notes ----------
+@api.get("/credit-notes")
+async def list_credit_notes(user=Depends(get_current_user)):
+    docs = await db.credit_notes.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return docs
+
+
+@api.get("/credit-notes/{cid}")
+async def get_credit_note(cid: str, user=Depends(get_current_user)):
+    doc = await db.credit_notes.find_one({"id": cid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Credit note not found")
+    return doc
+
+
+@api.get("/invoices/{iid}/credit-notes")
+async def list_credit_notes_for_invoice(iid: str, user=Depends(get_current_user)):
+    docs = await db.credit_notes.find({"invoice_id": iid}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return docs
+
+
+@api.post("/credit-notes")
+async def create_credit_note(inp: CreditNoteCreate, user=Depends(get_current_user)):
+    inv = await db.invoices.find_one({"id": inp.invoice_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    totals = compute_invoice_totals(inv["customer"], inp.line_items)
+    grand = totals["grand_total"]
+    # Guardrail: credit cannot exceed the remaining invoice value net of prior credits
+    existing_credits = float(inv.get("credits_applied", 0.0))
+    grand_inv = float(inv["grand_total"])
+    max_creditable = round(grand_inv - existing_credits, 2)
+    if grand > max_creditable + 0.001:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Credit amount ₹{grand:.2f} exceeds remaining creditable value ₹{max_creditable:.2f}",
+        )
+    cn_no = await next_credit_note_number()
+    cn = CreditNote(
+        credit_note_number=cn_no,
+        invoice_id=inv["id"],
+        invoice_number=inv["invoice_number"],
+        credit_date=inp.credit_date,
+        reason=inp.reason,
+        customer=inv["customer"],
+        line_items=[li.model_dump() for li in inp.line_items],
+        notes=inp.notes or "",
+        created_by=user["id"],
+        **totals,
+    )
+    doc = cn.model_dump()
+    await db.credit_notes.insert_one(doc)
+    doc.pop("_id", None)
+    # Update invoice credits_applied and recompute balance & status
+    new_credits = round(existing_credits + grand, 2)
+    amount_paid = float(inv.get("amount_paid", 0.0))
+    new_balance = round(grand_inv - amount_paid - new_credits, 2)
+    if new_balance <= 0.001:
+        status_str = "paid"
+        new_balance = 0.0
+    elif amount_paid > 0 or new_credits > 0:
+        status_str = "partially_paid"
+    else:
+        status_str = "pending"
+    await db.invoices.update_one(
+        {"id": inv["id"]},
+        {"$set": {"credits_applied": new_credits, "balance": new_balance, "status": status_str}},
+    )
+    return doc
+
+
 # ---------- Reports ----------
 @api.get("/reports/summary")
 async def summary(user=Depends(get_current_user)):
     docs = await db.invoices.find({}, {"_id": 0}).to_list(5000)
-    tot_taxable = sum(d.get("taxable_amount", 0) for d in docs)
-    tot_cgst = sum(d.get("cgst", 0) for d in docs)
-    tot_sgst = sum(d.get("sgst", 0) for d in docs)
-    tot_igst = sum(d.get("igst", 0) for d in docs)
+    cns = await db.credit_notes.find({}, {"_id": 0}).to_list(5000)
+    tot_taxable = sum(d.get("taxable_amount", 0) for d in docs) - sum(c.get("taxable_amount", 0) for c in cns)
+    tot_cgst = sum(d.get("cgst", 0) for d in docs) - sum(c.get("cgst", 0) for c in cns)
+    tot_sgst = sum(d.get("sgst", 0) for d in docs) - sum(c.get("sgst", 0) for c in cns)
+    tot_igst = sum(d.get("igst", 0) for d in docs) - sum(c.get("igst", 0) for c in cns)
     tot_grand = sum(d.get("grand_total", 0) for d in docs)
     tot_paid = sum(d.get("amount_paid", 0) for d in docs)
+    tot_credits = sum(d.get("credits_applied", 0) for d in docs)
     tot_outstanding = sum(d.get("balance", 0) for d in docs)
     counts = {"paid": 0, "pending": 0, "partially_paid": 0}
     for d in docs:
@@ -461,8 +616,10 @@ async def summary(user=Depends(get_current_user)):
         "igst": r(tot_igst),
         "grand_total": r(tot_grand),
         "amount_paid": r(tot_paid),
+        "credits_applied": r(tot_credits),
         "outstanding": r(tot_outstanding),
         "invoice_count": len(docs),
+        "credit_note_count": len(cns),
         "status_counts": counts,
     }
 

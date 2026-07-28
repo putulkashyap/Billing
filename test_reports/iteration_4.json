@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 4 validated the two new features: (1) Invoice edit-until-paid via PUT /api/invoices/{id}, and (2) GST-compliant Credit Notes (Section 34) CRUD. Backend: all 7 pytest cases passed (edit pending, block paid, first CN number TE/CN/2026-27/0001, increment to 0002, exceed-limit guardrail, list/get/by-invoice, summary fields). Frontend: found and FIXED a critical missing `useNavigate()` call in Invoices.jsx that caused a ReferenceError ('nav is not defined') when clicking Edit or Credit buttons. After the fix, full UI flow verified: Edit action navigates to /invoices/:id/edit with all fields pre-filled; Credit action navigates to /credit-notes/new?invoice_id=... with cn-ref-invoice='TE/2026-27/0001'; /credit-notes list shows raised CNs; CreditNotePreview modal renders with CN badge, TE/CN/2026-27/000X number, ref invoice, Section 34 declaration and Download PDF. Sidebar nav-credit-notes present. Edit action correctly hidden on paid invoices.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Invoices.jsx", "issue": "FIXED by test agent — Missing `const nav = useNavigate();` caused ReferenceError when clicking Edit or Credit action buttons. onClick handlers used `nav(...)` but the hook was never invoked. Added the hook call.", "selector": "[data-testid^=invoice-edit-], [data-testid^=invoice-credit-]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_edit_and_credit_notes.py",
+    "/app/test_reports/pytest/iter4.xml"
+  ],
+  "action_items": [
+    "Redeploy to production so the Invoices.jsx `useNavigate` fix reaches the live app (user is on production, this change lives only in preview until redeployed).",
+    "Consider adding a similar sanity ESLint rule (react-hooks/rules-of-hooks + no-undef) to catch missing hook invocations before shipping."
+  ],
+  "critical_code_review_comments": [
+    "Invoices.jsx used `nav` in two onClick handlers without calling useNavigate — a classic copy-paste from CreditNoteForm.jsx. Fixed here.",
+    "CreditNoteForm submit does not soft-reject `discount >= line_gross` (would allow negative taxable per line). Backend still computes correctly, but UI could warn.",
+    "Summary endpoint recomputes on every call by scanning all invoices+CNs; fine at MVP scale but for larger volumes an aggregate pipeline or cached materialized view would be better.",
+    "PUT /api/invoices/{id} accepts a full InvoiceCreate body; no field-level audit log is stored for edits. Consider persisting an edit history for GST audit compliance."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/Invoices.jsx",
+    "/app/backend/tests/test_edit_and_credit_notes.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100% (after 1 fix)"},
+  "test_credentials": "Admin: hi@trayambak.in / Ranjita@1985",
+  "seed_data_creation": "Created 3 disposable TEST_ invoices (EditMe, PaidBlocker, ExceedLimit) and 3 credit notes during tests. All cleaned up post-test. User's TE/2026-27/0001 invoice restored to pending / balance 52156 / credits_applied 0 / amount_paid 0 / payments []. Credit-note counter for FY 2026-27 removed so next CN starts at 0001. Invoice counter reset to seq=1 so next new invoice is TE/2026-27/0002.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "DB clean state: db.invoices has exactly one document (TE/2026-27/0001, Chief Executive Officer, pending, balance 52156). db.credit_notes is empty. db.counters has only invoice_2026-27 seq=1 (credit_note counter deleted so first CN auto-creates as TE/CN/2026-27/0001). Preview environment now has Invoices.jsx patched with `const nav = useNavigate();` — main agent should ensure this change is included in the next production deploy.",
+  "rca of the issue": "Invoices.jsx bug — Root cause: the developer added `import { Link, useNavigate }` but forgot to invoke `useNavigate()` inside the component body while still using the returned `nav` variable in two new onClick handlers (Edit + Credit buttons). This caused a ReferenceError at click-time. Reproduction: login → /invoices → click Edit or Credit on any row → red 'Uncaught runtime errors: nav is not defined' overlay. Mitigation applied: added `const nav = useNavigate();` at the top of the component (line 14). Verified by clicking both actions successfully and reaching /invoices/:id/edit and /credit-notes/new?invoice_id=... respectively."
+}

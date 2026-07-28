@@ -2,12 +2,13 @@ import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { LogoSVG } from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
-import { LayoutDashboard, FileText, Users, Wallet, UserCog, LogOut, PlusCircle } from "lucide-react";
+import { LayoutDashboard, FileText, Users, Wallet, UserCog, LogOut, PlusCircle, FileMinus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
   { to: "/invoices", label: "Invoices", icon: FileText, testid: "nav-invoices" },
+  { to: "/credit-notes", label: "Credit Notes", icon: FileMinus, testid: "nav-credit-notes" },
   { to: "/reconciliation", label: "Reconciliation", icon: Wallet, testid: "nav-reconciliation" },
   { to: "/customers", label: "Customers", icon: Users, testid: "nav-customers" },
   { to: "/staff", label: "Staff", icon: UserCog, testid: "nav-staff", adminOnly: true },

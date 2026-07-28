@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { computeTotals, fmtINRWithSymbol, isGujaratGSTIN, todayISO } from "@/lib/gst";
 import { Card } from "@/components/ui/card";
@@ -17,6 +17,8 @@ const TAX_BRACKETS = [0, 5, 12, 18, 28];
 
 export default function InvoiceForm() {
   const nav = useNavigate();
+  const { id: editId } = useParams();
+  const isEdit = Boolean(editId);
   const [orderType, setOrderType] = useState("regular");
   const [customers, setCustomers] = useState([]);
   const [customer, setCustomer] = useState({ name: "", gstin: "", address: "", phone: "", email: "" });
@@ -26,8 +28,34 @@ export default function InvoiceForm() {
   const [reg, setReg] = useState({ po_number: "", reference_date: "" });
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [invoiceNumber, setInvoiceNumber] = useState("");
 
   useEffect(() => { api.get("/customers").then((r) => setCustomers(r.data)).catch(() => {}); }, []);
+
+  useEffect(() => {
+    if (!isEdit) return;
+    api.get(`/invoices/${editId}`).then((r) => {
+      const inv = r.data;
+      if (inv.status === "paid") {
+        toast.error("Paid invoices cannot be edited");
+        nav("/invoices");
+        return;
+      }
+      setInvoiceNumber(inv.invoice_number);
+      setOrderType(inv.order_type);
+      setCustomer(inv.customer || { name: "", gstin: "", address: "", phone: "", email: "" });
+      setInvoiceDate(inv.invoice_date);
+      setItems((inv.line_items || []).map((it) => ({ ...it })));
+      setGem({
+        gem_contract_no: inv.gem_contract_no || "",
+        gem_order_date: inv.gem_order_date || "",
+        buyer_department: inv.buyer_department || "",
+        delivery_date: inv.delivery_date || "",
+      });
+      setReg({ po_number: inv.po_number || "", reference_date: inv.reference_date || "" });
+      setNotes(inv.notes || "");
+    }).catch(() => { toast.error("Failed to load invoice"); nav("/invoices"); });
+  }, [editId, isEdit, nav]);
 
   const totals = computeTotals(customer, items);
 
@@ -81,8 +109,14 @@ export default function InvoiceForm() {
           <button onClick={() => nav(-1)} className="text-xs text-slate-500 flex items-center gap-1 mb-2 hover:text-slate-800">
             <ArrowLeft className="w-3 h-3" /> Back
           </button>
-          <h1 className="text-4xl font-heading font-semibold tracking-tight text-slate-900">New Tax Invoice</h1>
-          <p className="text-sm text-slate-500 mt-1">Fill line items manually. GST is auto-calculated based on customer GSTIN.</p>
+          <h1 className="text-4xl font-heading font-semibold tracking-tight text-slate-900">
+            {isEdit ? `Edit Invoice · ${invoiceNumber}` : "New Tax Invoice"}
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {isEdit
+              ? "You can edit this invoice until it is fully paid."
+              : "Fill line items manually. GST is auto-calculated based on customer GSTIN."}
+          </p>
         </div>
         <Button
           data-testid="invoice-save-btn"
@@ -90,7 +124,7 @@ export default function InvoiceForm() {
           disabled={saving}
           className="bg-blue-600 hover:bg-blue-700 text-white px-6 h-11"
         >
-          {saving ? "Saving…" : "Save Invoice"}
+          {saving ? "Saving…" : isEdit ? "Update Invoice" : "Save Invoice"}
         </Button>
       </header>
 

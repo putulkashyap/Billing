@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { fmtINRWithSymbol } from "@/lib/gst";
 import { Input } from "@/components/ui/input";
@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusPill } from "./Dashboard";
-import { FileText, Eye, Search, Plus } from "lucide-react";
+import { FileText, Eye, Search, Plus, Pencil, FileMinus } from "lucide-react";
 import InvoicePreview from "@/components/invoice/InvoicePreview";
 
 export default function Invoices() {
+  const nav = useNavigate();
   const [invoices, setInvoices] = useState([]);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -114,13 +115,34 @@ export default function Invoices() {
                 <td className="px-4 py-3 text-right font-mono text-amber-700">{fmtINRWithSymbol(inv.balance)}</td>
                 <td className="px-4 py-3 text-right"><StatusPill status={inv.status} /></td>
                 <td className="px-4 py-3 text-right">
-                  <button
-                    data-testid={`invoice-view-${inv.invoice_number}`}
-                    onClick={() => setPreviewInv(inv)}
-                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs"
-                  >
-                    <Eye className="w-3.5 h-3.5" /> View
-                  </button>
+                  <div className="inline-flex items-center gap-3 justify-end">
+                    <button
+                      data-testid={`invoice-view-${inv.invoice_number}`}
+                      onClick={() => setPreviewInv(inv)}
+                      className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs"
+                      title="View / Download"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> View
+                    </button>
+                    {inv.status !== "paid" && (
+                      <button
+                        data-testid={`invoice-edit-${inv.invoice_number}`}
+                        onClick={() => nav(`/invoices/${inv.id}/edit`)}
+                        className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 text-xs"
+                        title="Edit"
+                      >
+                        <Pencil className="w-3.5 h-3.5" /> Edit
+                      </button>
+                    )}
+                    <button
+                      data-testid={`invoice-credit-${inv.invoice_number}`}
+                      onClick={() => nav(`/credit-notes/new?invoice_id=${inv.id}`)}
+                      className="inline-flex items-center gap-1 text-amber-700 hover:text-amber-900 text-xs"
+                      title="Raise Credit Note"
+                    >
+                      <FileMinus className="w-3.5 h-3.5" /> Credit
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
