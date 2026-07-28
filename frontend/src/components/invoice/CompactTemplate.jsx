@@ -52,7 +52,7 @@ export default function CompactTemplate({ invoice }) {
           <div className="font-mono">{inv.customer?.gstin || "—"}</div>
         </div>
         <div className="border border-slate-300 px-2 py-1">
-          <div className="text-slate-500 uppercase tracking-wider text-[8px]">{inv.order_type === "gem" ? "GeM Contract" : "PO No."}</div>
+          <div className="text-slate-500 uppercase tracking-wider text-[8px]">{inv.order_type === "gem" ? "Contract No." : "PO No."}</div>
           <div className="font-mono">{inv.order_type === "gem" ? (inv.gem_contract_no || "—") : (inv.po_number || "—")}</div>
         </div>
         <div className="border border-slate-300 px-2 py-1">

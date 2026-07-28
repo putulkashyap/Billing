@@ -11,7 +11,7 @@ import ModernTemplate from "./ModernTemplate";
 import CompactTemplate from "./CompactTemplate";
 
 const TEMPLATES = [
-  { id: "gem", label: "GeM / Govt Supply" },
+  { id: "gem", label: "Government Supply" },
   { id: "modern", label: "Modern Corporate" },
   { id: "compact", label: "Compact Single-Page" },
 ];
@@ -71,7 +71,7 @@ export default function InvoicePreview({ invoice, onClose }) {
         <VisuallyHidden.Root>
           <DialogTitle>Invoice Preview {invoice.invoice_number}</DialogTitle>
           <DialogDescription>
-            Preview and download A4 PDF for invoice {invoice.invoice_number}. Choose between GeM, Modern Corporate, or Compact templates.
+            Preview and download A4 PDF for invoice {invoice.invoice_number}. Choose between Government Supply, Modern Corporate, or Compact templates.
           </DialogDescription>
         </VisuallyHidden.Root>
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">

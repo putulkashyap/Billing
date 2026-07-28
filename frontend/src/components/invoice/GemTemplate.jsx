@@ -30,7 +30,7 @@ export default function GemTemplate({ invoice }) {
           <div className="text-[10px] mt-1"><b>GSTIN:</b> <span className="font-mono">{COMPANY.gstin}</span> · <b>Email:</b> {COMPANY.email}</div>
         </div>
         <div className="text-right">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">GeM / Govt Supply</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Government Supply</div>
           <div className="text-2xl font-heading font-bold mt-1">TAX INVOICE</div>
           <div className="mt-1 font-mono text-sm">{inv.invoice_number}</div>
           <div className="text-[10px] text-slate-600">Date: {inv.invoice_date}</div>
@@ -39,8 +39,8 @@ export default function GemTemplate({ invoice }) {
 
       {/* GeM meta boxes */}
       <div className="grid grid-cols-2 gap-3 mt-4">
-        <MetaBox title="GeM Contract / PO No." value={inv.gem_contract_no || "—"} />
-        <MetaBox title="GeM Order Date" value={inv.gem_order_date || "—"} />
+        <MetaBox title="Contract / PO No." value={inv.gem_contract_no || "—"} />
+        <MetaBox title="Order Date" value={inv.gem_order_date || "—"} />
         <MetaBox title="Buyer Department / Organization" value={inv.buyer_department || "—"} full />
         <MetaBox title="Delivery Date" value={inv.delivery_date || "—"} />
         <MetaBox title="Place of Supply" value={inv.customer?.gstin ? `State code ${inv.customer.gstin.slice(0,2)}` : "—"} />
