@@ -14,7 +14,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -22,7 +22,7 @@ export default function Login() {
     try {
       await login(email.trim().toLowerCase(), password);
       toast.success("Welcome back");
-      nav("/");
+      nav("/dashboard");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Login failed");
     } finally {

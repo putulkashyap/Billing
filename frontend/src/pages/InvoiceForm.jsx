@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Trash2, Plus, ArrowLeft, Landmark } from "lucide-react";
 
-const emptyItem = () => ({ description: "", hsn: "", quantity: 1, unit: "Nos", rate: 0, discount: 0, tax_rate: 18 });
+const emptyItem = (priceType = "exclusive") => ({ description: "", hsn: "", quantity: 1, unit: "Nos", rate: 0, discount: 0, tax_rate: 18, price_type: priceType });
 const UNITS = ["Nos", "Pcs", "Kg", "Set", "Lot", "Month", "Hours", "Service"];
 const TAX_BRACKETS = [0, 5, 12, 18, 28];
 
@@ -20,10 +20,11 @@ export default function InvoiceForm() {
   const { id: editId } = useParams();
   const isEdit = Boolean(editId);
   const [orderType, setOrderType] = useState("regular");
+  const [priceType, setPriceType] = useState("exclusive");
   const [customers, setCustomers] = useState([]);
   const [customer, setCustomer] = useState({ name: "", gstin: "", address: "", phone: "", email: "" });
   const [invoiceDate, setInvoiceDate] = useState(todayISO());
-  const [items, setItems] = useState([emptyItem()]);
+  const [items, setItems] = useState([emptyItem("exclusive")]);
   const [gem, setGem] = useState({ gem_contract_no: "", gem_order_date: "", buyer_department: "", delivery_date: "" });
   const [reg, setReg] = useState({ po_number: "", reference_date: "" });
   const [notes, setNotes] = useState("");
@@ -43,9 +44,13 @@ export default function InvoiceForm() {
       }
       setInvoiceNumber(inv.invoice_number);
       setOrderType(inv.order_type);
+      // Set invoice-level default to majority type of existing items (fallback exclusive)
+      const items0 = inv.line_items || [];
+      const inc = items0.filter((i) => i.price_type === "inclusive").length;
+      setPriceType(inc > items0.length / 2 ? "inclusive" : "exclusive");
       setCustomer(inv.customer || { name: "", gstin: "", address: "", phone: "", email: "" });
       setInvoiceDate(inv.invoice_date);
-      setItems((inv.line_items || []).map((it) => ({ ...it })));
+      setItems(items0.map((it) => ({ price_type: "exclusive", ...it })));
       setGem({
         gem_contract_no: inv.gem_contract_no || "",
         gem_order_date: inv.gem_order_date || "",
@@ -62,7 +67,7 @@ export default function InvoiceForm() {
   const updateItem = (idx, patch) => {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   };
-  const addItem = () => setItems((p) => [...p, emptyItem()]);
+  const addItem = () => setItems((p) => [...p, emptyItem(priceType)]);
   const removeItem = (idx) => setItems((p) => p.length > 1 ? p.filter((_, i) => i !== idx) : p);
 
   const pickCustomer = (id) => {
@@ -89,6 +94,7 @@ export default function InvoiceForm() {
           rate: Number(it.rate),
           discount: Number(it.discount || 0),
           tax_rate: Number(it.tax_rate),
+          price_type: it.price_type || "exclusive",
         })),
         notes,
       };
@@ -147,6 +153,22 @@ export default function InvoiceForm() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-5">
           <Field label="Invoice Date">
             <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} data-testid="invoice-date-input" />
+          </Field>
+          <Field label="Price Type (default for new lines)">
+            <Select
+              value={priceType}
+              onValueChange={(v) => {
+                setPriceType(v);
+                // Apply to existing items too, staff can override per row
+                setItems((prev) => prev.map((it) => ({ ...it, price_type: v })));
+              }}
+            >
+              <SelectTrigger data-testid="invoice-price-type"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="exclusive">Exclusive of GST</SelectItem>
+                <SelectItem value="inclusive">Inclusive of GST</SelectItem>
+              </SelectContent>
+            </Select>
           </Field>
           {orderType === "gem" ? (
             <>
@@ -234,14 +256,22 @@ export default function InvoiceForm() {
               <th className="px-3 py-2 text-right w-28">Rate (₹)</th>
               <th className="px-3 py-2 text-right w-24">Discount</th>
               <th className="px-3 py-2 text-right w-20">Tax %</th>
+              <th className="px-3 py-2 text-left w-28">Price Type</th>
               <th className="px-3 py-2 text-right w-32">Amount</th>
               <th className="px-3 py-2 w-10"></th>
             </tr>
           </thead>
           <tbody>
             {items.map((it, i) => {
-              const gross = (Number(it.quantity) || 0) * (Number(it.rate) || 0);
-              const taxable = gross - Number(it.discount || 0);
+              const qty = Number(it.quantity) || 0;
+              const rate = Number(it.rate) || 0;
+              const disc = Number(it.discount || 0);
+              const gross = qty * rate;
+              const billed = gross - disc;
+              const isInclusive = it.price_type === "inclusive";
+              const taxable = isInclusive
+                ? (it.tax_rate ? billed / (1 + Number(it.tax_rate) / 100) : billed)
+                : billed;
               return (
                 <tr key={i} className="border-t border-slate-100 align-top">
                   <td className="px-3 py-2 text-slate-400 font-mono">{i + 1}</td>
@@ -260,6 +290,15 @@ export default function InvoiceForm() {
                     <Select value={String(it.tax_rate)} onValueChange={(v) => updateItem(i, { tax_rate: Number(v) })}>
                       <SelectTrigger data-testid={`item-tax-${i}`}><SelectValue /></SelectTrigger>
                       <SelectContent>{TAX_BRACKETS.map((t) => <SelectItem key={t} value={String(t)}>{t}%</SelectItem>)}</SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-3 py-2">
+                    <Select value={it.price_type || "exclusive"} onValueChange={(v) => updateItem(i, { price_type: v })}>
+                      <SelectTrigger data-testid={`item-price-type-${i}`}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="exclusive">Excl.</SelectItem>
+                        <SelectItem value="inclusive">Incl.</SelectItem>
+                      </SelectContent>
                     </Select>
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-slate-900">{fmtINRWithSymbol(taxable)}</td>

@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 6 validated Part 1 (Public Landing at /) + Part 2 (invoice-level + per-line-item inclusive/exclusive GST engine). Backend: 5/5 GST math tests PASS (inclusive single-line 1180→taxable 1000/CGST 90/SGST 90, exclusive regression 1000→1180, mixed 590 incl + 500 excl → taxable 1000/tax 180/grand 1180, inclusive with tax_rate=0 no divide-by-zero → taxable == billed, and GET /api/invoices/{id} confirms per-line price_type persisted). Frontend: Landing page shows all required testids (header-logo, nav-*, hero-services-btn, hero-portal-btn, service-gem/bulk/procurement, contact-email, footer-login-btn), hero headline 'Reliable B2B & Retail Supply Solutions' present, GSTIN 24AMAPR1170Q1ZT and hi@trayambak.in shown, and privacy guardrail HELD — no 'Ranjita', no phone number anywhere on landing/footer. LoginModal opens from all three CTAs; valid creds navigate to /dashboard; unauth /invoices redirects to /login; sidebar Dashboard link uses /dashboard (visually active). InvoiceForm price-type UI: switching invoice-level to Inclusive flips all existing lines to Incl.; switching back to Exclusive flips them to Excl.; per-item override (line0 Incl. while invoice default = Excl.) is preserved; a newly-added line defaults to the current invoice-level value (Excl.). End-to-end save produced TE/2026-27/0002 with correct math (taxable ₹1,500, tax ₹270, grand ₹1,770 for one incl 1180 + one excl 500 line at 18% intra-state). Cleanup: all TEST_ invoices/customers deleted via mongosh; counter rewound to seq=1; user's TE/2026-27/0001 preserved intact.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "LoginModal → invalid credentials",
+        "issue": "Invalid credentials in the glassmorphic LoginModal cause the user to be redirected off the landing page to /login (standalone login page), instead of showing an error toast and keeping the modal open on the landing page. Root cause: /app/frontend/src/lib/api.js response interceptor blindly does `window.location.href = '/login'` for ANY 401, including the /auth/login endpoint itself. Fix: skip redirect when the failing request URL ends with '/auth/login', e.g. `if (err.config?.url?.endsWith('/auth/login')) return Promise.reject(err);` before the redirect. This preserves the modal UX from the landing page.",
+        "affected_selectors": ["[data-testid='modal-login-submit']", "[data-testid='modal-login-email']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_gst_price_type.py",
+    "/app/test_reports/pytest/gst_price_type.xml"
+  ],
+  "action_items": [
+    "In /app/frontend/src/lib/api.js response interceptor, exempt POST /auth/login from the 401→/login hard-navigation so a failed login inside the LoginModal shows a toast and keeps the modal open on the landing page. Currently, any wrong password from the landing modal boots the user to the standalone /login page — losing the marketing context that Part 1 was designed to preserve."
+  ],
+  "critical_code_review_comments": [
+    "api.js: single global 401 handler is too coarse — it converts every unauthorized response, including the initial login attempt itself, into a hard redirect. Consider whitelisting the auth endpoint and/or using a scoped axios instance for auth calls.",
+    "InvoiceForm: switching invoice-level price_type currently rewrites ALL existing lines' price_type, silently overriding any per-item override the user has already set. Consider adding a confirmation or applying invoice-level default only to newly-added lines to avoid data loss for advanced users.",
+    "server.py compute_invoice_totals: inclusive+discount semantics — code does `billed = line_gross - it.discount` and then divides by (1+tax) — this treats the discount as a discount on the INCLUSIVE amount. Please document that the discount is inclusive of tax for inclusive lines (contrast with exclusive lines where discount reduces taxable base pre-tax). Not a bug, but worth a code comment for future maintainers.",
+    "No DELETE /api/invoices/{id} endpoint exists — test/QA cleanup requires direct mongo access. Consider adding an admin-only soft-delete for QA/rollback scenarios."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_gst_price_type.py"
+  ],
+  "success_rate": {"backend": "100% (5/5 math tests)", "frontend": "95% (1 UX bug in LoginModal on invalid creds)"},
+  "test_credentials": "Admin: hi@trayambak.in / Ranjita@1985",
+  "seed_data_creation": "Created 6 disposable TEST_ invoices during backend + frontend testing (numbers 0002-0007). ALL deleted via mongosh after testing. Counter reset to seq=1. Only TE/2026-27/0001 remains. Next real invoice will be TE/2026-27/0002 as required.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "DB state: single invoice TE/2026-27/0001 (Chief Executive Officer, grand_total 52156, pending). Counter invoice_2026-27 seq=1. All TEST_ data cleaned. Backend GST engine + price_type is proven correct — do not re-test math unless main agent modifies compute_invoice_totals. Priority: verify the LoginModal 401 interceptor fix (invalid creds should keep user on landing with toast, not redirect to /login).",
+  "rca of the issue": "LoginModal invalid-creds UX bug — axios global response interceptor in /app/frontend/src/lib/api.js (lines 17-20) triggers `window.location.href='/login'` for every 401 response including the login POST itself. When a user enters wrong credentials in the modal, backend returns 401, the interceptor fires BEFORE the LoginModal's catch block can render the toast, and the browser navigates away from the Landing page to the standalone /login page. Reproduction: open landing, click header-login-btn, enter any wrong creds, submit → observe url changes to /login and modal disappears. Mitigation: `if (err.config?.url?.endsWith('/auth/login')) return Promise.reject(err);` inside the interceptor before the redirect logic."
+}

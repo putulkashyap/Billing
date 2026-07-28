@@ -6,7 +6,7 @@ import { LayoutDashboard, FileText, Users, Wallet, UserCog, LogOut, PlusCircle, 
 import { Button } from "@/components/ui/button";
 
 const NAV = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
   { to: "/invoices", label: "Invoices", icon: FileText, testid: "nav-invoices" },
   { to: "/credit-notes", label: "Credit Notes", icon: FileMinus, testid: "nav-credit-notes" },
   { to: "/reconciliation", label: "Reconciliation", icon: Wallet, testid: "nav-reconciliation" },
@@ -41,7 +41,7 @@ export default function Layout({ children }) {
             <NavLink
               key={n.to}
               to={n.to}
-              end={n.to === "/"}
+              end={n.to === "/dashboard"}
               data-testid={n.testid}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${

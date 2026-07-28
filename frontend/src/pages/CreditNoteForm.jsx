@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Trash2, Plus, ArrowLeft, FileMinus } from "lucide-react";
 
-const emptyItem = () => ({ description: "", hsn: "", quantity: 1, unit: "Nos", rate: 0, discount: 0, tax_rate: 18 });
+const emptyItem = () => ({ description: "", hsn: "", quantity: 1, unit: "Nos", rate: 0, discount: 0, tax_rate: 18, price_type: "exclusive" });
 const UNITS = ["Nos", "Pcs", "Kg", "Set", "Lot", "Month", "Hours", "Service"];
 const TAX_BRACKETS = [0, 5, 12, 18, 28];
 

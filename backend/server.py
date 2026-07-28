@@ -128,6 +128,7 @@ class LineItem(BaseModel):
     rate: float
     discount: float = 0.0  # absolute amount
     tax_rate: float = 18.0  # percent
+    price_type: Literal["exclusive", "inclusive"] = "exclusive"
 
 
 class Payment(BaseModel):
@@ -243,11 +244,17 @@ def compute_invoice_totals(customer: dict, items: List[LineItem]) -> dict:
     cgst = sgst = igst = 0.0
     for it in items:
         line_gross = it.quantity * it.rate
-        line_taxable = line_gross - it.discount
         subtotal += line_gross
         total_discount += it.discount
+        if it.price_type == "inclusive":
+            # rate is inclusive of tax; extract taxable backwards
+            billed = line_gross - it.discount
+            line_taxable = billed / (1 + it.tax_rate / 100.0) if it.tax_rate else billed
+            tax_amt = billed - line_taxable
+        else:
+            line_taxable = line_gross - it.discount
+            tax_amt = line_taxable * (it.tax_rate / 100.0)
         taxable += line_taxable
-        tax_amt = line_taxable * (it.tax_rate / 100.0)
         if intra:
             cgst += tax_amt / 2
             sgst += tax_amt / 2

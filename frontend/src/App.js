@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { Toaster } from "sonner";
+import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Invoices from "@/pages/Invoices";
@@ -29,8 +30,9 @@ function App() {
         <AuthProvider>
           <Toaster position="top-right" richColors />
           <Routes>
+            <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<Protected><Dashboard /></Protected>} />
+            <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
             <Route path="/invoices" element={<Protected><Invoices /></Protected>} />
             <Route path="/invoices/new" element={<Protected><InvoiceForm /></Protected>} />
             <Route path="/invoices/:id/edit" element={<Protected><InvoiceForm /></Protected>} />

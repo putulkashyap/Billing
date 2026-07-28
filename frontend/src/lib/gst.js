@@ -19,8 +19,15 @@ export function computeTotals(customer, items) {
     const disc = Number(it.discount) || 0;
     const taxRate = Number(it.tax_rate) || 0;
     const gross = qty * rate;
-    const line_taxable = gross - disc;
-    const tax = line_taxable * (taxRate / 100);
+    let line_taxable, tax;
+    if (it.price_type === "inclusive") {
+      const billed = gross - disc;
+      line_taxable = taxRate ? billed / (1 + taxRate / 100) : billed;
+      tax = billed - line_taxable;
+    } else {
+      line_taxable = gross - disc;
+      tax = line_taxable * (taxRate / 100);
+    }
     subtotal += gross;
     total_discount += disc;
     taxable += line_taxable;
