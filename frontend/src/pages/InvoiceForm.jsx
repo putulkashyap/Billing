@@ -98,8 +98,10 @@ export default function InvoiceForm() {
         })),
         notes,
       };
-      const r = await api.post("/invoices", payload);
-      toast.success(`Invoice ${r.data.invoice_number} created`);
+      const r = isEdit
+        ? await api.put(`/invoices/${editId}`, payload)
+        : await api.post("/invoices", payload);
+      toast.success(`Invoice ${r.data.invoice_number} ${isEdit ? "updated" : "created"}`);
       nav("/invoices");
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to save");

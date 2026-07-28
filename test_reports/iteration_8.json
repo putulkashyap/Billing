@@ -1,0 +1,35 @@
+{
+  "summary": "Verified CRITICAL bug fix: PUT /api/invoices/{id} now correctly UPDATES the same invoice instead of creating a duplicate. Backend regression suite (4 tests) all PASSED. Frontend E2E verified end-to-end: Edit button navigates to edit route, submit button labeled 'Update Invoice', success toast says 'Invoice TE/2026-27/0001 updated' (not 'created'), no duplicate row after edit, counter unchanged. Regression checks confirmed POST still creates new invoices (TE/2026-27/0002) and PUT on a fully-paid invoice returns HTTP 400 'Paid invoices cannot be edited'. All disposable invoices cleaned up and counter rewound to seq=1. User's TE/2026-27/0001 restored to original values.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/invoices/{id}", "issue": "No invoice DELETE endpoint exists; had to clean disposable test invoices directly in MongoDB. Consider adding an admin-only DELETE for disposable/mistaken invoices, or expose a soft-cancel."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_invoice_edit_regression.py",
+    "/app/test_reports/pytest/invoice_edit_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "InvoiceForm.jsx line 101 fix verified correct: uses isEdit ternary between api.put and api.post. Toast label also toggles create/updated correctly.",
+    "Backend PUT /api/invoices/{iid} correctly preserves id, invoice_number, and does NOT increment the invoice_2026-27 counter — atomic increment only in POST path.",
+    "Paid-invoice edit guard on backend returns 400 with detail containing 'paid' — good defensive check.",
+    "Consider adding DELETE /api/invoices/{id} (admin only) so disposable/test invoices can be cleaned via API instead of mongo shell."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_invoice_edit_regression.py (new)"
+  ],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100%"},
+  "test_credentials": "Admin hi@trayambak.in / Ranjita@1985 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Existing TE/2026-27/0001 preserved and restored to original snapshot. Disposable invoices created during regression tests (0002 for POST-increment check, 0003 for paid-block check) were deleted via mongosh and counter reset to seq=1.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bug 'update creates duplicate invoice' is FIXED and verified in preview DB. Preview state at test end: exactly 1 invoice (TE/2026-27/0001, pending, grand_total 52156) and counter invoice_2026-27 seq=1. The regression test file /app/backend/tests/test_invoice_edit_regression.py is idempotent and safe to re-run; it snapshots + restores TE/2026-27/0001 and cleans any disposable invoices via mongosh. Note: DB name is 'test_database' (from backend/.env).",
+  "rca of the issue": "Root cause: InvoiceForm.jsx line 101 previously always called api.post('/invoices', payload) irrespective of edit vs new mode, so Update on an existing invoice hit POST which allocates the next atomic counter and creates a new invoice document. Fix: `const r = isEdit ? await api.put('/invoices/'+editId, payload) : await api.post('/invoices', payload);` — now edit mode routes to PUT which updates the same document by id and does not increment the counter. Toast message and header/button labels also branch on isEdit for correct UX."
+}
