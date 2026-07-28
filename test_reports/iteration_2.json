@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 2 – Post-fix regression pass. Backend: 9/9 pytest tests PASSED (auth, invoices Gujarat intra-state CGST+SGST, Maharashtra inter-state IGST, partial+full payments, /reports/summary aggregates, staff create+login, RBAC 403). No _id/password_hash leaks. Frontend: all reviewed flows PASSED end-to-end – admin login → dashboard summary cards, /invoices/new toggle GeM/Regular, Gujarat GSTIN → totals-grand shows ₹ 11,800.00, save redirects to /invoices with new row TE/2026-27/0007, invoice preview opens with template-selector (3 options, switching works), download-pdf-btn enabled, /reconciliation log payment dialog records payment (Partially Paid pill shown), /staff add-staff creates row.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Invoice preview & payment/staff dialogs", "issues": ["Radix a11y warning: DialogContent missing aria-describedby / DialogDescription in some dialogs (InvoicePreview dialog lacks a DialogTitle wrapper – custom header used instead). Non-blocking but affects screen readers."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_backend.py",
+    "/app/test_reports/pytest/iter2_results.xml"
+  ],
+  "action_items": [
+    "Optional a11y: add VisuallyHidden DialogTitle inside InvoicePreview DialogContent and DialogDescription to Payment/Staff dialogs to silence Radix warnings.",
+    "Optional: normalize email casing on frontend Staff form (backend lowercases; harmless)."
+  ],
+  "critical_code_review_comments": [
+    "server.py invoice.status_counts init dict misses unknown statuses – handled with .get default, OK.",
+    "Consider indexing db.invoices by customer.gstin and status for filter perf as volume grows.",
+    "html2canvas multi-page PDF loop reuses same full image with negative y offset – works but not true pagination; may cut rows across pages."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_backend.py (new pytest suite)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin hi@trayambak.in / Ranjita@1985 (from /app/memory/test_credentials.md). Test staff created dynamically per run.",
+  "seed_data_creation": "Created TEST_ prefixed customers (GJ/MH), several invoices, staff users (email lowercased by backend). Not cleaned up – safe test data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend /api endpoints all working post _id fix. Reusable pytest at /app/backend/tests/test_backend.py runs against REACT_APP_BACKEND_URL. Frontend flows fully verified with Playwright. Admin seed idempotent.",
+  "rca of the issue": "Previous 500s were caused by returning the same doc that Mongo mutated with an ObjectId `_id` after insert_one. Fix (already applied by E1): pop `_id` (and `password_hash` for users) before returning. Verified via successful POST /api/invoices returning JSON with invoice_number TE/2026-27/xxxx, and POST /api/users returning fields id/email/name/role/created_at without _id or password_hash."
+}
