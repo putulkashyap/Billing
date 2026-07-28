@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogoSVG } from "@/components/Logo";
+import { LogoSVG, LogoDark } from "@/components/Logo";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -36,7 +36,7 @@ export default function Login() {
       <div className="relative hidden md:flex bg-[#0F172A] text-slate-100 p-12 flex-col justify-between overflow-hidden">
         <div className="te-grid-bg absolute inset-0 opacity-30" />
         <div className="relative">
-          <LogoSVG width={260} height={60} />
+          <LogoDark width={260} height={60} />
         </div>
         <div className="relative space-y-8 max-w-md">
           <div>

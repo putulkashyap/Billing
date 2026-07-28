@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Download, X } from "lucide-react";
@@ -24,24 +25,39 @@ export default function InvoicePreview({ invoice, onClose }) {
     if (!printRef.current) return;
     setBusy(true);
     try {
-      const canvas = await html2canvas(printRef.current, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-      const img = canvas.toDataURL("image/png");
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
-      const w = 210;
-      const h = (canvas.height * w) / canvas.width;
-      let y = 0;
-      const pageH = 297;
-      if (h <= pageH) {
-        pdf.addImage(img, "PNG", 0, 0, w, h);
-      } else {
-        // multi-page
-        let remaining = h;
-        while (remaining > 0) {
-          pdf.addImage(img, "PNG", 0, y, w, h);
-          remaining -= pageH;
-          y -= pageH;
-          if (remaining > 0) pdf.addPage();
-        }
+      const pageWmm = 210;
+      const pageHmm = 297;
+      const pxPerMm = canvas.width / pageWmm; // horizontal scale
+      const pageHpx = Math.floor(pageHmm * pxPerMm); // pixels per A4 page
+
+      // True multi-page: slice source canvas into page-sized chunks
+      let renderedPx = 0;
+      let pageIndex = 0;
+      while (renderedPx < canvas.height) {
+        const sliceHpx = Math.min(pageHpx, canvas.height - renderedPx);
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHpx;
+        const ctx = pageCanvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        ctx.drawImage(
+          canvas,
+          0, renderedPx, canvas.width, sliceHpx,
+          0, 0, canvas.width, sliceHpx
+        );
+        const img = pageCanvas.toDataURL("image/jpeg", 0.95);
+        const sliceHmm = sliceHpx / pxPerMm;
+        if (pageIndex > 0) pdf.addPage();
+        pdf.addImage(img, "JPEG", 0, 0, pageWmm, sliceHmm);
+        renderedPx += sliceHpx;
+        pageIndex += 1;
       }
       pdf.save(`${invoice.invoice_number.replace(/\//g, "_")}.pdf`);
     } finally { setBusy(false); }
@@ -52,6 +68,12 @@ export default function InvoicePreview({ invoice, onClose }) {
   return (
     <Dialog open={!!invoice} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-5xl p-0 gap-0 max-h-[95vh] overflow-hidden">
+        <VisuallyHidden.Root>
+          <DialogTitle>Invoice Preview {invoice.invoice_number}</DialogTitle>
+          <DialogDescription>
+            Preview and download A4 PDF for invoice {invoice.invoice_number}. Choose between GeM, Modern Corporate, or Compact templates.
+          </DialogDescription>
+        </VisuallyHidden.Root>
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
           <div className="flex items-center gap-3">
             <div>
@@ -71,7 +93,7 @@ export default function InvoicePreview({ invoice, onClose }) {
             <Button onClick={download} disabled={busy} className="bg-blue-600 hover:bg-blue-700 text-white gap-2" data-testid="download-pdf-btn">
               <Download className="w-4 h-4" /> {busy ? "Rendering…" : "Download PDF"}
             </Button>
-            <button onClick={onClose} className="p-2 rounded-md hover:bg-slate-200"><X className="w-4 h-4" /></button>
+            <button onClick={onClose} aria-label="Close preview" className="p-2 rounded-md hover:bg-slate-200"><X className="w-4 h-4" /></button>
           </div>
         </div>
         <div className="overflow-y-auto te-scroll bg-slate-200 p-6" style={{ maxHeight: "calc(95vh - 60px)" }}>

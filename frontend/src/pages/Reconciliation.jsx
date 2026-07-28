@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { StatusPill } from "./Dashboard";
 import { Wallet, Search, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
@@ -144,7 +144,10 @@ export default function Reconciliation() {
 
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Log Payment · {target?.invoice_number}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Log Payment · {target?.invoice_number}</DialogTitle>
+            <DialogDescription>Record a full or partial payment received against this invoice.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-3">
             <div className="text-sm text-slate-500">Outstanding: <span className="font-mono text-amber-700">{fmtINRWithSymbol(target?.balance)}</span></div>
             <div><Label>Amount</Label><Input type="number" step="0.01" value={payment.amount} onChange={(e) => setPayment({ ...payment, amount: e.target.value })} data-testid="pay-amount-input" /></div>

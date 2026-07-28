@@ -1,6 +1,6 @@
 import React from "react";
 import { fmtINR, fmtINRWithSymbol, numberToWords } from "@/lib/gst";
-import { LogoSVG } from "@/components/Logo";
+import { LogoDark } from "@/components/Logo";
 
 const COMPANY = {
   name: "TRAYAMBAK ENTERPRISE",
@@ -17,7 +17,7 @@ export default function ModernTemplate({ invoice }) {
       {/* Header — two tone */}
       <div className="flex items-stretch">
         <div className="flex-1 bg-[#0F172A] text-white p-5">
-          <LogoSVG width={200} height={46} />
+          <LogoDark width={200} height={46} />
           <div className="mt-3 text-[10px] text-slate-300 leading-snug">{COMPANY.address}</div>
           <div className="text-[10px] mt-1 text-slate-300">GSTIN <span className="font-mono text-sky-300">{COMPANY.gstin}</span> · {COMPANY.email}</div>
         </div>
