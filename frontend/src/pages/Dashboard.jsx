@@ -2,9 +2,8 @@ import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { fmtINRWithSymbol } from "@/lib/gst";
 import { Card } from "@/components/ui/card";
-import { TrendingUp, Wallet, Receipt, IndianRupee, ArrowUpRight, FileCheck2, Clock, Building2 } from "lucide-react";
+import { TrendingUp, Wallet, Receipt, IndianRupee, ArrowUpRight, FileCheck2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { format } from "date-fns";
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null);
@@ -59,8 +58,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 p-0 border-slate-200 rounded-md overflow-hidden">
+      <div className="grid grid-cols-1 gap-6">
+        <Card className="p-0 border-slate-200 rounded-md overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
             <div>
               <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Recent</div>
@@ -94,35 +93,10 @@ export default function Dashboard() {
             </tbody>
           </table>
         </Card>
-
-        <Card className="p-5 border-slate-200 rounded-md">
-          <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 mb-1">Legal Identity</div>
-          <h3 className="text-lg font-heading font-semibold mb-4 flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-blue-600" /> TRAYAMBAK ENTERPRISE
-          </h3>
-          <dl className="space-y-3 text-sm">
-            <Detail label="Proprietor" value="Ranjita Rai" />
-            <Detail label="GSTIN" value="24AMAPR1170Q1ZT" mono />
-            <Detail label="State" value="Gujarat (24)" />
-            <Detail label="Bank" value="IDFC FIRST — Gotri" />
-            <Detail label="A/C" value="69315494820" mono />
-            <Detail label="IFSC" value="IDFB0042392" mono />
-          </dl>
-          <div className="mt-5 pt-4 border-t border-slate-100 text-xs text-slate-500 flex items-center gap-1.5">
-            <Clock className="w-3 h-3" /> Last sync {format(new Date(), "PPp")}
-          </div>
-        </Card>
       </div>
     </div>
   );
 }
-
-const Detail = ({ label, value, mono }) => (
-  <div className="flex justify-between gap-4">
-    <dt className="text-slate-500">{label}</dt>
-    <dd className={`text-slate-900 text-right ${mono ? "font-mono" : ""}`}>{value}</dd>
-  </div>
-);
 
 export const StatusPill = ({ status }) => {
   const map = {
