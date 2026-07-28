@@ -1,0 +1,16 @@
+{
+  "summary": "Retested the LoginModal 401 interceptor guard fix from iteration_6. All 5 required scenarios PASS: (1) wrong-cred submissions from header-login-btn, hero-portal-btn and footer-login-btn all keep URL on /, keep the LoginModal open, show an 'Invalid credentials' toast, and do NOT set te_token. (2) After typing the correct password Ranjita@1985 the login succeeds and navigates to /dashboard with te_token set. (3) Regression: setting te_token='invalid.token.here' and visiting /invoices still hard-redirects to /login (session-expiry path intact for non-login endpoints). (4) Regression: /login page with wrong creds shows 'Invalid credentials' toast in place, no redirect loop, no token stored. The interceptor guard `if (url.endsWith('/auth/login')) return Promise.reject(err)` works universally.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": ["api.js interceptor url check uses endsWith('/auth/login') which is safe here because axios config.url is the relative path against baseURL /api; any future rename of the login endpoint needs the guard updated in tandem."],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only retest)", "frontend": "100%"},
+  "test_credentials": "hi@trayambak.in / Ranjita@1985 (admin)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iteration_7 verified the axios 401 interceptor exemption for /auth/login. Landing LoginModal (header/hero/footer entry points), standalone /login page, and expired-token protected-route redirect all behave correctly. Backend unchanged since iteration_6.",
+  "rca of the issue": "Not applicable — bug already fixed in iteration_6 and re-verified here."
+}

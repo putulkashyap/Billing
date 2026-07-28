@@ -15,6 +15,10 @@ api.interceptors.response.use(
   (r) => r,
   (err) => {
     if (err?.response?.status === 401) {
+      const url = err?.config?.url || "";
+      // Do NOT hard-redirect when the failing request IS the login attempt itself —
+      // let the caller (Login page or LoginModal) render the error toast in place.
+      if (url.endsWith("/auth/login")) return Promise.reject(err);
       localStorage.removeItem("te_token");
       localStorage.removeItem("te_user");
       if (window.location.pathname !== "/login") window.location.href = "/login";
