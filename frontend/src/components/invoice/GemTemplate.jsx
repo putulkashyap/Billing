@@ -22,22 +22,22 @@ export default function GemTemplate({ invoice }) {
   const inv = invoice;
   return (
     <div className="text-[11px] leading-relaxed text-slate-900">
-      {/* Header */}
+      {/* Header — brand + company info on left, only TAX INVOICE title on right */}
       <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
         <div>
           <LogoSVG width={220} height={50} />
           <div className="mt-2 text-[10px] text-slate-600 max-w-xs leading-snug">{COMPANY.address}</div>
           <div className="text-[10px] mt-1"><b>GSTIN:</b> <span className="font-mono">{COMPANY.gstin}</span> · <b>Email:</b> {COMPANY.email}</div>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-heading font-bold">TAX INVOICE</div>
-          <div className="mt-1 font-mono text-sm">{inv.invoice_number}</div>
-          <div className="text-[10px] text-slate-600">Date: {inv.invoice_date}</div>
+        <div className="text-right self-center">
+          <div className="text-3xl font-heading font-bold tracking-tight">TAX INVOICE</div>
         </div>
       </div>
 
-      {/* Order meta */}
+      {/* Invoice identity + order meta */}
       <div className="grid grid-cols-2 gap-3 mt-4">
+        <MetaBox title="Invoice No." value={inv.invoice_number} mono />
+        <MetaBox title="Invoice Date" value={inv.invoice_date} mono />
         <MetaBox title="Contract / PO No." value={inv.gem_contract_no || inv.po_number || "—"} />
         <MetaBox title="PO / Contract Date" value={inv.gem_order_date || inv.reference_date || "—"} />
         <MetaBox title="Buyer Department / Organization" value={inv.buyer_department || "—"} full />
@@ -155,10 +155,10 @@ export default function GemTemplate({ invoice }) {
   );
 }
 
-const MetaBox = ({ title, value, full }) => (
+const MetaBox = ({ title, value, full, mono }) => (
   <div className={`border border-slate-300 p-2 ${full ? "col-span-2" : ""}`}>
     <div className="text-[9px] uppercase tracking-wider text-slate-500">{title}</div>
-    <div className="text-[11px] font-medium mt-0.5">{value}</div>
+    <div className={`text-[11px] font-medium mt-0.5 ${mono ? "font-mono" : ""}`}>{value}</div>
   </div>
 );
 
