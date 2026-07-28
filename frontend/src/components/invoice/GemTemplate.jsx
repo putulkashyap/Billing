@@ -8,7 +8,14 @@ const COMPANY = {
   gstin: "24AMAPR1170Q1ZT",
   address: "3rd Floor, C8-301, Akshar Pavilion, Vasna Bhayli Main Road, Opp Rosedale Heights, Vadodara, Gujarat - 391410",
   email: "hi@trayambak.in",
-  bank: { name: "IDFC FIRST Bank", branch: "Vadodara-Gotri Branch, Vadodara - 390021", ac: "69315494820", ifsc: "IDFB0042392" },
+  bank: {
+    holder: "TRAYAMBAK ENTERPRISE",
+    name: "IDFC FIRST Bank",
+    branch: "Vadodara-Gotri Branch, Vadodara - 390021",
+    ac: "69315494820",
+    type: "Current Account",
+    ifsc: "IDFB0042392",
+  },
 };
 
 export default function GemTemplate({ invoice }) {
@@ -101,9 +108,11 @@ export default function GemTemplate({ invoice }) {
           </div>
           <div className="border border-slate-300 p-3 mt-2">
             <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">Bank Details</div>
+            <div className="text-[10px]"><b>A/C Holder:</b> {COMPANY.bank.holder}</div>
             <div className="text-[10px]"><b>Bank:</b> {COMPANY.bank.name}</div>
             <div className="text-[10px]"><b>Branch:</b> {COMPANY.bank.branch}</div>
-            <div className="text-[10px]"><b>A/C:</b> <span className="font-mono">{COMPANY.bank.ac}</span></div>
+            <div className="text-[10px]"><b>A/C Type:</b> {COMPANY.bank.type}</div>
+            <div className="text-[10px]"><b>A/C No.:</b> <span className="font-mono">{COMPANY.bank.ac}</span></div>
             <div className="text-[10px]"><b>IFSC:</b> <span className="font-mono">{COMPANY.bank.ifsc}</span></div>
           </div>
         </div>

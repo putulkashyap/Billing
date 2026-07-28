@@ -6,7 +6,14 @@ const COMPANY = {
   gstin: "24AMAPR1170Q1ZT",
   address: "3rd Floor, C8-301, Akshar Pavilion, Vasna Bhayli Main Road, Opp Rosedale Heights, Vadodara, Gujarat - 391410",
   email: "hi@trayambak.in",
-  bank: { name: "IDFC FIRST Bank", branch: "Vadodara-Gotri", ac: "69315494820", ifsc: "IDFB0042392" },
+  bank: {
+    holder: "TRAYAMBAK ENTERPRISE",
+    name: "IDFC FIRST Bank",
+    branch: "Vadodara-Gotri",
+    ac: "69315494820",
+    type: "Current",
+    ifsc: "IDFB0042392",
+  },
 };
 
 export default function CompactTemplate({ invoice }) {
@@ -118,7 +125,7 @@ export default function CompactTemplate({ invoice }) {
           <div className="text-slate-500 uppercase tracking-wider text-[8px] mb-0.5">Amount in Words</div>
           <div>{numberToWords(inv.grand_total)}</div>
           <div className="mt-1.5 pt-1.5 border-t border-slate-200">
-            <span className="text-slate-500">Bank:</span> {COMPANY.bank.name} · {COMPANY.bank.branch} · <span className="font-mono">A/C {COMPANY.bank.ac}</span> · <span className="font-mono">IFSC {COMPANY.bank.ifsc}</span>
+            <span className="text-slate-500">A/C Holder:</span> {COMPANY.bank.holder} · <span className="text-slate-500">Bank:</span> {COMPANY.bank.name} · {COMPANY.bank.branch} · <span className="text-slate-500">Type:</span> {COMPANY.bank.type} · <span className="font-mono">A/C {COMPANY.bank.ac}</span> · <span className="font-mono">IFSC {COMPANY.bank.ifsc}</span>
           </div>
         </div>
         <div className="border border-slate-300 p-2">

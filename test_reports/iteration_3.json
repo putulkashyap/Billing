@@ -1,0 +1,16 @@
+{
+  "summary": "Backend-only verification of dummy invoice cleanup for TRAYAMBAK GST Billing app. All 5 pytest assertions passed: (1) GET /api/invoices returns exactly 1 invoice with number TE/2026-27/0001, customer 'Chief Executive Officer', grand_total 52156 - no 'Preview Test Co' data present; (2) GET /api/customers returns []; (3) GET /api/users returns only hi@trayambak.in; (4) GET /api/reports/summary reflects only real invoice; (5) POST /api/invoices generated TE/2026-27/0002 confirming counter reset works atomically. After verification, the TE/2026-27/0002 test invoice was deleted and counter seq reset back to 1 via mongosh, so the user's ledger is clean and their next real invoice will be TE/2026-27/0002.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_cleanup_verification.py", "/app/test_reports/pytest/iter3.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": ["/app/backend/tests/test_cleanup_verification.py"],
+  "success_rate": {"backend": "100%", "frontend": "N/A"},
+  "test_credentials": "Admin: hi@trayambak.in / Ranjita@1985 (from prompt)",
+  "seed_data_creation": "Created & then deleted verification invoice TE/2026-27/0002 (customer 'Verify Counter Co'); counter for FY 2026-27 reset back to seq=1 post-verification.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "DB state after this iteration: db.invoices has exactly one document (TE/2026-27/0001, Chief Executive Officer, grand_total 52156). db.counters has invoice_2026-27 seq=1. db.customers is empty. db.users contains only hi@trayambak.in. Next new invoice created via API will be TE/2026-27/0002.",
+  "rca of the issue": "Not a code bug - data-only cleanup. Dummy invoice TE/2026-27/0001 ('Preview Test Co') was created during a prior visual regression test. Main agent used mongosh to delete the dummy, rename the real invoice from 0002 to 0001, and reset the counter to seq=1 so next $inc via find_one_and_update yields 2. Verification confirmed all three actions succeeded and the atomic counter logic in next_invoice_number() correctly increments to 0002."
+}

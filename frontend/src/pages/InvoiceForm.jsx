@@ -247,7 +247,7 @@ export default function InvoiceForm() {
           <div className="mt-4 flex items-start gap-2 text-xs text-slate-500 border-t border-slate-100 pt-4">
             <Landmark className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
             <div>
-              Payments to <b>IDFC FIRST Bank</b> — A/c <span className="font-mono">69315494820</span> · IFSC <span className="font-mono">IDFB0042392</span> (Vadodara-Gotri Branch)
+              Payments to <b>IDFC FIRST Bank</b> · A/c Holder <b>TRAYAMBAK ENTERPRISE</b> · Current A/c <span className="font-mono">69315494820</span> · IFSC <span className="font-mono">IDFB0042392</span> (Vadodara-Gotri Branch)
             </div>
           </div>
         </Card>

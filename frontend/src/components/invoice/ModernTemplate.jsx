@@ -7,7 +7,14 @@ const COMPANY = {
   gstin: "24AMAPR1170Q1ZT",
   address: "3rd Floor, C8-301, Akshar Pavilion, Vasna Bhayli Main Road, Opp Rosedale Heights, Vadodara, Gujarat - 391410",
   email: "hi@trayambak.in",
-  bank: { name: "IDFC FIRST Bank", branch: "Vadodara-Gotri Branch, Vadodara - 390021", ac: "69315494820", ifsc: "IDFB0042392" },
+  bank: {
+    holder: "TRAYAMBAK ENTERPRISE",
+    name: "IDFC FIRST Bank",
+    branch: "Vadodara-Gotri Branch, Vadodara - 390021",
+    ac: "69315494820",
+    type: "Current Account",
+    ifsc: "IDFB0042392",
+  },
 };
 
 export default function ModernTemplate({ invoice }) {
@@ -100,8 +107,10 @@ export default function ModernTemplate({ invoice }) {
           <div className="border border-slate-200 p-3">
             <div className="text-[9px] uppercase tracking-[0.2em] text-blue-600 mb-1.5">Payment Details</div>
             <div className="grid grid-cols-2 gap-1 text-[10px]">
+              <div className="text-slate-500">A/C Holder</div><div>{COMPANY.bank.holder}</div>
               <div className="text-slate-500">Bank</div><div>{COMPANY.bank.name}</div>
               <div className="text-slate-500">Branch</div><div>{COMPANY.bank.branch}</div>
+              <div className="text-slate-500">A/C Type</div><div>{COMPANY.bank.type}</div>
               <div className="text-slate-500">A/C No.</div><div className="font-mono">{COMPANY.bank.ac}</div>
               <div className="text-slate-500">IFSC</div><div className="font-mono">{COMPANY.bank.ifsc}</div>
             </div>
