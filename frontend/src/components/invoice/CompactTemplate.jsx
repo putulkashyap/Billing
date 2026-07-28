@@ -127,6 +127,9 @@ export default function CompactTemplate({ invoice }) {
           <div className="mt-1.5 pt-1.5 border-t border-slate-200">
             <span className="text-slate-500">A/C Holder:</span> {COMPANY.bank.holder} · <span className="text-slate-500">Bank:</span> {COMPANY.bank.name} · {COMPANY.bank.branch} · <span className="text-slate-500">Type:</span> {COMPANY.bank.type} · <span className="font-mono">A/C {COMPANY.bank.ac}</span> · <span className="font-mono">IFSC {COMPANY.bank.ifsc}</span>
           </div>
+          <div className="mt-1 italic text-slate-600 text-[9px]">
+            <b>Note:</b> Please make cheques in favor of <b>{COMPANY.name}</b>.
+          </div>
         </div>
         <div className="border border-slate-300 p-2">
           <div className="flex justify-between"><span>Taxable</span><span className="font-mono">{fmtINR(inv.taxable_amount)}</span></div>

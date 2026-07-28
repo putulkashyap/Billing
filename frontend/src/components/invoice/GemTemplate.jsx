@@ -30,36 +30,40 @@ export default function GemTemplate({ invoice }) {
           <div className="text-[10px] mt-1"><b>GSTIN:</b> <span className="font-mono">{COMPANY.gstin}</span> · <b>Email:</b> {COMPANY.email}</div>
         </div>
         <div className="text-right">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Government Supply</div>
-          <div className="text-2xl font-heading font-bold mt-1">TAX INVOICE</div>
+          <div className="text-2xl font-heading font-bold">TAX INVOICE</div>
           <div className="mt-1 font-mono text-sm">{inv.invoice_number}</div>
           <div className="text-[10px] text-slate-600">Date: {inv.invoice_date}</div>
         </div>
       </div>
 
-      {/* GeM meta boxes */}
+      {/* Order meta */}
       <div className="grid grid-cols-2 gap-3 mt-4">
-        <MetaBox title="Contract / PO No." value={inv.gem_contract_no || "—"} />
-        <MetaBox title="Order Date" value={inv.gem_order_date || "—"} />
+        <MetaBox title="Contract / PO No." value={inv.gem_contract_no || inv.po_number || "—"} />
+        <MetaBox title="Order Date" value={inv.gem_order_date || inv.reference_date || "—"} />
         <MetaBox title="Buyer Department / Organization" value={inv.buyer_department || "—"} full />
         <MetaBox title="Delivery Date" value={inv.delivery_date || "—"} />
-        <MetaBox title="Place of Supply" value={inv.customer?.gstin ? `State code ${inv.customer.gstin.slice(0,2)}` : "—"} />
+        <MetaBox title="Place of Supply" value={inv.customer?.gstin ? `State code ${inv.customer.gstin.slice(0,2)} · ${inv.is_intra_state ? "Intra-state" : "Inter-state"}` : "Unregistered · Inter-state"} />
       </div>
 
-      {/* Bill To */}
+      {/* Supplier + Bill To */}
       <div className="grid grid-cols-2 gap-3 mt-4">
         <div className="border border-slate-300 p-3">
-          <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">Consignee / Bill To</div>
-          <div className="font-semibold">{inv.customer?.name}</div>
-          <div className="text-[10px] whitespace-pre-line">{inv.customer?.address}</div>
-          {inv.customer?.gstin && <div className="text-[10px] mt-1"><b>GSTIN:</b> <span className="font-mono">{inv.customer.gstin}</span></div>}
-          {inv.customer?.phone && <div className="text-[10px]"><b>Phone:</b> {inv.customer.phone}</div>}
-        </div>
-        <div className="border border-slate-300 p-3">
-          <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">Supplier</div>
+          <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">Supplier / Seller</div>
           <div className="font-semibold">{COMPANY.name}</div>
           <div className="text-[10px]">Proprietor: {COMPANY.proprietor}</div>
+          <div className="text-[10px] mt-1 whitespace-pre-line leading-snug">{COMPANY.address}</div>
           <div className="text-[10px] mt-1"><b>GSTIN:</b> <span className="font-mono">{COMPANY.gstin}</span></div>
+          <div className="text-[10px]"><b>State Code:</b> <span className="font-mono">24 · Gujarat</span></div>
+          <div className="text-[10px]"><b>Email:</b> {COMPANY.email}</div>
+        </div>
+        <div className="border border-slate-300 p-3">
+          <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">Bill To / Consignee</div>
+          <div className="font-semibold">{inv.customer?.name}</div>
+          <div className="text-[10px] whitespace-pre-line leading-snug">{inv.customer?.address}</div>
+          {inv.customer?.gstin && <div className="text-[10px] mt-1"><b>GSTIN:</b> <span className="font-mono">{inv.customer.gstin}</span></div>}
+          {inv.customer?.gstin && <div className="text-[10px]"><b>State Code:</b> <span className="font-mono">{inv.customer.gstin.slice(0,2)}</span></div>}
+          {inv.customer?.phone && <div className="text-[10px]"><b>Phone:</b> {inv.customer.phone}</div>}
+          {inv.customer?.email && <div className="text-[10px]"><b>Email:</b> {inv.customer.email}</div>}
         </div>
       </div>
 
@@ -114,6 +118,9 @@ export default function GemTemplate({ invoice }) {
             <div className="text-[10px]"><b>A/C Type:</b> {COMPANY.bank.type}</div>
             <div className="text-[10px]"><b>A/C No.:</b> <span className="font-mono">{COMPANY.bank.ac}</span></div>
             <div className="text-[10px]"><b>IFSC:</b> <span className="font-mono">{COMPANY.bank.ifsc}</span></div>
+            <div className="text-[10px] mt-1.5 pt-1.5 border-t border-slate-200 italic">
+              <b>Note:</b> Please make cheques in favor of <b>{COMPANY.name}</b>.
+            </div>
           </div>
         </div>
         <table className="border border-slate-900 self-start">

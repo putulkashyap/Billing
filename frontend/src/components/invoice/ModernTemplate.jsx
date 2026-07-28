@@ -114,6 +114,9 @@ export default function ModernTemplate({ invoice }) {
               <div className="text-slate-500">A/C No.</div><div className="font-mono">{COMPANY.bank.ac}</div>
               <div className="text-slate-500">IFSC</div><div className="font-mono">{COMPANY.bank.ifsc}</div>
             </div>
+            <div className="text-[10px] mt-2 pt-2 border-t border-slate-200 italic text-slate-600">
+              <b>Note:</b> Please make cheques in favor of <b>{COMPANY.name}</b>.
+            </div>
           </div>
         </div>
 
