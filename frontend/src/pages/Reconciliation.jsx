@@ -181,9 +181,31 @@ export default function Reconciliation() {
                 <td className="px-4 py-3 text-right font-mono text-amber-700">{fmtINRWithSymbol(inv.balance)}</td>
                 <td className="px-4 py-3 text-right"><StatusPill status={inv.status} /></td>
                 <td className="px-4 py-3 text-right">
-                  {inv.status !== "paid" && (
-                    <button onClick={() => openPay(inv)} className="text-blue-600 text-xs hover:underline" data-testid={`log-payment-${inv.invoice_number}`}>Log Payment</button>
-                  )}
+                  <div className="inline-flex items-center gap-3 justify-end">
+                    {inv.status !== "paid" && (
+                      <button onClick={() => openPay(inv)} className="text-blue-600 text-xs hover:underline" data-testid={`log-payment-${inv.invoice_number}`}>Log Payment</button>
+                    )}
+                    {inv.status !== "paid" && (
+                      <button
+                        data-testid={`whatsapp-remind-${inv.invoice_number}`}
+                        onClick={() => sendWhatsAppReminder(inv)}
+                        title="WhatsApp reminder"
+                        className="text-emerald-600 hover:text-emerald-700"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {inv.status !== "paid" && inv.customer?.email && (
+                      <button
+                        data-testid={`email-remind-${inv.invoice_number}`}
+                        onClick={() => sendEmailReminder(inv)}
+                        title="Email reminder"
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

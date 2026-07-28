@@ -179,7 +179,7 @@ export default function Expenses() {
                 <td className="px-4 py-3 text-right"><StatusPill status={e.status} /></td>
                 <td className="px-4 py-3 text-right space-x-3">
                   <button onClick={() => openEdit(e)} data-testid={`expense-edit-${e.bill_number}`} className="text-blue-600 text-xs">Edit</button>
-                  {isAdmin && <button onClick={() => del(e)} className="text-red-500 text-xs"><Trash2 className="w-3.5 h-3.5 inline" /></button>}
+                  {isAdmin && <button onClick={() => del(e)} data-testid={`expense-delete-${e.bill_number}`} className="text-red-500 text-xs"><Trash2 className="w-3.5 h-3.5 inline" /></button>}
                 </td>
               </tr>
             ))}
