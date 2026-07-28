@@ -177,11 +177,8 @@ export default function InvoiceForm() {
               <Field label="GeM Contract / PO No.">
                 <Input value={gem.gem_contract_no} onChange={(e) => setGem({ ...gem, gem_contract_no: e.target.value })} data-testid="gem-contract-input" />
               </Field>
-              <Field label="GeM Order Date">
-                <Input type="date" value={gem.gem_order_date} onChange={(e) => setGem({ ...gem, gem_order_date: e.target.value })} />
-              </Field>
-              <Field label="Delivery Date">
-                <Input type="date" value={gem.delivery_date} onChange={(e) => setGem({ ...gem, delivery_date: e.target.value })} />
+              <Field label="PO / Contract Date">
+                <Input type="date" value={gem.gem_order_date} onChange={(e) => setGem({ ...gem, gem_order_date: e.target.value })} data-testid="gem-po-date" />
               </Field>
               <Field label="Buyer Department / Organization" className="md:col-span-4">
                 <Input value={gem.buyer_department} onChange={(e) => setGem({ ...gem, buyer_department: e.target.value })} data-testid="gem-buyer-input" />
@@ -192,8 +189,8 @@ export default function InvoiceForm() {
               <Field label="PO Number">
                 <Input value={reg.po_number} onChange={(e) => setReg({ ...reg, po_number: e.target.value })} data-testid="po-number-input" />
               </Field>
-              <Field label="Reference Date">
-                <Input type="date" value={reg.reference_date} onChange={(e) => setReg({ ...reg, reference_date: e.target.value })} />
+              <Field label="PO / Contract Date">
+                <Input type="date" value={reg.reference_date} onChange={(e) => setReg({ ...reg, reference_date: e.target.value })} data-testid="reg-po-date" />
               </Field>
             </>
           )}

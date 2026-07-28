@@ -39,9 +39,8 @@ export default function GemTemplate({ invoice }) {
       {/* Order meta */}
       <div className="grid grid-cols-2 gap-3 mt-4">
         <MetaBox title="Contract / PO No." value={inv.gem_contract_no || inv.po_number || "—"} />
-        <MetaBox title="Order Date" value={inv.gem_order_date || inv.reference_date || "—"} />
+        <MetaBox title="PO / Contract Date" value={inv.gem_order_date || inv.reference_date || "—"} />
         <MetaBox title="Buyer Department / Organization" value={inv.buyer_department || "—"} full />
-        <MetaBox title="Delivery Date" value={inv.delivery_date || "—"} />
         <MetaBox title="Place of Supply" value={inv.customer?.gstin ? `State code ${inv.customer.gstin.slice(0,2)} · ${inv.is_intra_state ? "Intra-state" : "Inter-state"}` : "Unregistered · Inter-state"} />
       </div>
 

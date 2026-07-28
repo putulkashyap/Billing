@@ -36,7 +36,7 @@ export default function ModernTemplate({ invoice }) {
           <div className="text-[10px] mt-4 space-y-0.5">
             <div><span className="opacity-70">Date:</span> {inv.invoice_date}</div>
             {inv.po_number && <div><span className="opacity-70">PO No:</span> {inv.po_number}</div>}
-            {inv.reference_date && <div><span className="opacity-70">Ref Date:</span> {inv.reference_date}</div>}
+            {(inv.reference_date || inv.gem_order_date) && <div><span className="opacity-70">PO/Contract Date:</span> {inv.reference_date || inv.gem_order_date}</div>}
           </div>
         </div>
       </div>
