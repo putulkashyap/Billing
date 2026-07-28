@@ -1,0 +1,147 @@
+{
+  "project_context": {
+    "app_type": "dashboard / SaaS finance app",
+    "target_audience": "TRAYAMBAK ENTERPRISE (Proprietor: Ranjita Rai)",
+    "tone": "Authoritative, Efficient, Trustworthy, Modern SaaS",
+    "theme_preference": "Sleek Dark Mode default (Deep Slate) or Crisp Light Mode (Slate 50), with high-density functional design."
+  },
+  "typography": {
+    "strategy": "Old Money Tech / Corporate SaaS - Authoritative headings paired with a sterile, highly legible mono/sans body optimized for tabular data and Indian numbering formats.",
+    "fonts": {
+      "headings": "Outfit",
+      "body": "IBM Plex Sans",
+      "mono": "IBM Plex Mono (for invoice numbers, UTRs, GSTINs, and currency amounts)"
+    },
+    "hierarchy": {
+      "H1": "text-4xl sm:text-5xl font-semibold tracking-tight",
+      "H2": "text-2xl sm:text-3xl font-medium tracking-tight",
+      "H3": "text-xl sm:text-2xl font-medium",
+      "H4": "text-lg sm:text-xl font-medium",
+      "Body": "text-sm",
+      "Small": "text-xs tracking-wider",
+      "Overlines": "text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground"
+    },
+    "rules": [
+      "NEVER use Inter, Roboto, or Open Sans for headings.",
+      "Numbers in tables (rates, GST, totals) MUST use tabular-nums or IBM Plex Mono.",
+      "Line height: leading-none for headers, leading-relaxed for body.",
+      "Headlines > 32px MUST use tracking-tight."
+    ]
+  },
+  "colors": {
+    "archetype": "The Performance Pro / High-Contrast SaaS",
+    "palette": {
+      "brand_deep_slate": "#0F172A",
+      "brand_azure_blue": "#2563EB",
+      "brand_light_accent": "#38BDF8",
+      "background": {
+        "light": "#F8FAFC",
+        "dark": "#0F172A"
+      },
+      "surface": {
+        "light": "#FFFFFF",
+        "dark": "#1E293B"
+      },
+      "text": {
+        "light": "#0F172A",
+        "dark": "#F8FAFC"
+      },
+      "status": {
+        "paid": "#10B981",
+        "pending": "#F59E0B",
+        "partially_paid": "#3B82F6",
+        "overdue": "#EF4444"
+      }
+    },
+    "rules": [
+      "Use Azure Blue (#2563EB) for primary actions and highlights.",
+      "Use Light Accent (#38BDF8) for subtle highlights, hover states, or progress bars.",
+      "No full-screen gradients. Use solid colors with 1px borders.",
+      "Avoid teal green (#1B93A4).",
+      "Status colors must be used consistently for Paid/Pending/Partially Paid badges."
+    ]
+  },
+  "visual_enhancers": {
+    "surfaces": "Grid Borders (The 'Technical' Look). Expose the skeleton with crisp 1px borders (border-slate-200 in light, border-slate-800 in dark) to separate widgets.",
+    "shadows": "Minimal. Rely on 1px borders for definition rather than soft shadows. If using shadow, use shadow-sm.",
+    "borders": "Subtle roundness (max 8px border-radius, i.e., rounded-md or rounded-lg).",
+    "glassmorphism": "Not recommended for main dashboard areas to maintain clarity, but can be used for sticky headers (backdrop-blur-xl bg-white/80 or bg-slate-900/80 with 1px bottom border)."
+  },
+  "grids_and_layouts": {
+    "strategy": "High Density Grid (For Dashboards / Analytics). Every pixel must be utilized. Data correlation and scanability are paramount.",
+    "bento_protocol": {
+      "base_grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4",
+      "gap": "gap-4 or gap-6",
+      "summary_cards": "col-span-1 (Single metrics: Revenue, CGST, SGST, IGST, Outstanding)",
+      "primary_data": "col-span-2 row-span-2 or col-span-3 (Main invoice table or Account Reconciliation view)",
+      "sidebar": "col-span-1 row-span-2 (Quick filters, Recent Payments)"
+    },
+    "spacing": [
+      "Generous padding for outer containers (p-6 or p-8).",
+      "Tight padding for dense tabular data (p-3 or p-4).",
+      "Cardless or strict rectangular grid structures."
+    ],
+    "invoice_templates": [
+      "GeM/Govt Supply: Strict tabular, highly formal, left-aligned text, right-aligned numbers.",
+      "Modern Corporate: Azure blue headers, clean grid, subtle branding.",
+      "Compact Single-Page: High density, minimal padding, optimized for A4 printing."
+    ]
+  },
+  "components": {
+    "libraries": [
+      "lucide-react for icons",
+      "recharts for financial trend charts (if any)",
+      "sonner for toast notifications",
+      "date-fns for date formatting",
+      "html2pdf.js or jspdf/jspdf-autotable for PDF generation"
+    ],
+    "rules": [
+      "Use Shadcn UI for standard inputs, selects, dialogs, dropdowns, and tables.",
+      "Customize Shadcn components to remove the 'default Vercel look'. Use Azure Blue as the primary ring color.",
+      "Invoice table: Sticky headers, text left, numbers right, Indian numbering format (Lakhs/Crores) with 2 decimal places.",
+      "Do NOT use native <select> or <input type='date'>. Use Shadcn equivalents."
+    ]
+  },
+  "motion": {
+    "strategy": "Minimalist — use micro-interactions for feedback.",
+    "interactions": [
+      "Hover states on table rows (bg-slate-50 / bg-slate-800/50).",
+      "Subtle button lift (-translate-y-[1px]) or background color shift on hover.",
+      "Smooth entrance animations for summary cards (staggered fade-in)."
+    ]
+  },
+  "accessibility": {
+    "contrast": "Ensure text meets APCA standards. Light text on Azure Blue must be white.",
+    "testing": "All interactive elements MUST include a data-testid attribute (e.g., data-testid='create-invoice-button').",
+    "focus": "focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+  },
+  "media": {
+    "image_urls": {
+      "login_hero": {
+        "url": "https://images.unsplash.com/photo-1778050368320-5d522c42f14c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MTN8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjBhYnN0cmFjdCUyMGFyY2hpdGVjdHVyZSUyMGJsdWUlMjBnbGFzc3xlbnwwfHx8fDE3ODQxMTA2NDF8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Modern glass building against a blue sky, used for login page split-screen background."
+      }
+    },
+    "rules": [
+      "Never use placeholder URLs. Use provided image URLs.",
+      "For empty states, use Lucide icons with subtle background circles (e.g., a FileText icon inside an Azure Blue transparent circle)."
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Implement a robust JWT-based Auth context with role-based routing (Admin/Staff).",
+    "The GST Calculation engine must correctly apply intra-state (CGST 9% + SGST 9%) for '24' GSTINs, and inter-state (IGST 18%) otherwise, based on the selected brackets (0/5/12/18/28%).",
+    "Use standard Indian numbering system (e.g., 1,00,000.00) using Intl.NumberFormat('en-IN', { minimumFractionDigits: 2 }).",
+    "Ensure the PDF generation creates an A4 sized document, strictly adhering to the selected template layout.",
+    "Do not allow delete/edit on finalized invoices. Implement a status transition logic (Draft -> Finalized -> Partially Paid / Paid)."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Avoid generic, 'on distribution' outputs. Make creative, distinctive frontends.",
+    "Do not use dark colors as gradients. Use them as solid backgrounds.",
+    "Do not center align the app container (.App { text-align: center; } is banned).",
+    "Never use AI assistant emojis (🤖🧠💭) for icons.",
+    "Use 2-3x more spacing than feels comfortable for outer containers, but keep tabular data dense.",
+    "Prioritize using pre-existing components from src/components/ui.",
+    "All interactive and key informational elements MUST include a data-testid attribute.",
+    "Use 'sonner' for toasts."
+  ]
+}
