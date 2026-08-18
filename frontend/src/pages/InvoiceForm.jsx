@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
-import { computeTotals, fmtINRWithSymbol, isGujaratGSTIN, todayISO } from "@/lib/gst";
+import { computeTotals, fmtINRWithSymbol, todayISO } from "@/lib/gst";
+import { INDIAN_STATES, stateName, gstinStateCode, isValidGSTIN } from "@/lib/india";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,10 @@ export default function InvoiceForm() {
   const [orderType, setOrderType] = useState("regular");
   const [priceType, setPriceType] = useState("exclusive");
   const [customers, setCustomers] = useState([]);
-  const [customer, setCustomer] = useState({ name: "", gstin: "", address: "", phone: "", email: "" });
+  const [hsnMaster, setHsnMaster] = useState([]);
+  const [company, setCompany] = useState({ state_code: "24", state: "Gujarat" });
+  const [customer, setCustomer] = useState({ name: "", gstin: "", address: "", phone: "", email: "", state_code: "", state: "" });
+  const [pos, setPos] = useState({ code: "", state: "" });
   const [invoiceDate, setInvoiceDate] = useState(todayISO());
   const [items, setItems] = useState([emptyItem("exclusive")]);
   const [gem, setGem] = useState({ gem_contract_no: "", gem_order_date: "", buyer_department: "", delivery_date: "" });
@@ -31,7 +35,11 @@ export default function InvoiceForm() {
   const [saving, setSaving] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState("");
 
-  useEffect(() => { api.get("/customers").then((r) => setCustomers(r.data)).catch(() => {}); }, []);
+  useEffect(() => {
+    api.get("/customers").then((r) => setCustomers(r.data)).catch(() => {});
+    api.get("/hsn").then((r) => setHsnMaster(r.data)).catch(() => {});
+    api.get("/company").then((r) => setCompany(r.data)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -44,11 +52,11 @@ export default function InvoiceForm() {
       }
       setInvoiceNumber(inv.invoice_number);
       setOrderType(inv.order_type);
-      // Set invoice-level default to majority type of existing items (fallback exclusive)
       const items0 = inv.line_items || [];
       const inc = items0.filter((i) => i.price_type === "inclusive").length;
       setPriceType(inc > items0.length / 2 ? "inclusive" : "exclusive");
-      setCustomer(inv.customer || { name: "", gstin: "", address: "", phone: "", email: "" });
+      setCustomer({ state_code: "", state: "", ...(inv.customer || { name: "" }) });
+      setPos({ code: inv.place_of_supply_code || "", state: inv.place_of_supply_state || "" });
       setInvoiceDate(inv.invoice_date);
       setItems(items0.map((it) => ({ price_type: "exclusive", ...it })));
       setGem({
@@ -62,7 +70,19 @@ export default function InvoiceForm() {
     }).catch(() => { toast.error("Failed to load invoice"); nav("/invoices"); });
   }, [editId, isEdit, nav]);
 
-  const totals = computeTotals(customer, items);
+  // Auto-derive PoS from customer if PoS not set yet
+  useEffect(() => {
+    if (pos.code) return;
+    const guess = customer.state_code || gstinStateCode(customer.gstin || "");
+    if (guess) setPos({ code: guess, state: customer.state || stateName(guess) });
+  }, [customer, pos.code]);
+
+  const supplierStateCode = company.state_code || "24";
+  const intra = pos.code && pos.code === supplierStateCode;
+  const totals = useMemo(
+    () => computeTotals({ state_code: pos.code, gstin: customer.gstin }, items, { supplierStateCode }),
+    [pos.code, customer.gstin, items, supplierStateCode]
+  );
 
   const updateItem = (idx, patch) => {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
@@ -72,13 +92,45 @@ export default function InvoiceForm() {
 
   const pickCustomer = (id) => {
     const c = customers.find((c) => c.id === id);
-    if (c) setCustomer({ name: c.name, gstin: c.gstin || "", address: c.address || "", phone: c.phone || "", email: c.email || "" });
+    if (!c) return;
+    setCustomer({
+      name: c.name, gstin: c.gstin || "",
+      address: c.billing_address || c.address || "",
+      phone: c.mobile || c.phone || "",
+      email: c.email || "",
+      state_code: c.state_code || "", state: c.state || "",
+    });
+    const sc = c.state_code || gstinStateCode(c.gstin || "");
+    if (sc) setPos({ code: sc, state: c.state || stateName(sc) });
+  };
+
+  const onHsnBlur = (idx) => {
+    const it = items[idx];
+    if (!it.hsn) return;
+    const h = hsnMaster.find((h) => h.code === it.hsn.trim() && h.active !== false);
+    if (h && Number(h.gst_rate) !== Number(it.tax_rate)) {
+      updateItem(idx, { tax_rate: Number(h.gst_rate) });
+      toast.success(`HSN ${h.code} → GST ${h.gst_rate}% applied`);
+    }
   };
 
   const submit = async () => {
     if (!customer.name) { toast.error("Customer name is required"); return; }
+    if (!pos.code) { toast.error("Place of Supply is required"); return; }
+    if (customer.gstin && !isValidGSTIN(customer.gstin)) { toast.error("Customer GSTIN is invalid"); return; }
     if (items.some((it) => !it.description || !it.quantity || !it.rate)) {
       toast.error("Every line item needs description, quantity and rate"); return;
+    }
+    if (items.some((it) => !it.hsn)) {
+      toast.error("HSN/SAC is required for every line item"); return;
+    }
+    // Cross-check HSN configured rate matches line rate (if HSN is in master)
+    for (const it of items) {
+      const h = hsnMaster.find((x) => x.code === (it.hsn || "").trim());
+      if (h && Number(h.gst_rate) !== Number(it.tax_rate)) {
+        toast.error(`HSN ${it.hsn} is configured at ${h.gst_rate}% but line uses ${it.tax_rate}%`);
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -88,6 +140,8 @@ export default function InvoiceForm() {
         ...(orderType === "regular" ? reg : {}),
         invoice_date: invoiceDate,
         customer,
+        place_of_supply_code: pos.code,
+        place_of_supply_state: pos.state || stateName(pos.code),
         line_items: items.map((it) => ({
           ...it,
           quantity: Number(it.quantity),
@@ -107,8 +161,6 @@ export default function InvoiceForm() {
       toast.error(e?.response?.data?.detail || "Failed to save");
     } finally { setSaving(false); }
   };
-
-  const intra = isGujaratGSTIN(customer.gstin);
 
   return (
     <div className="space-y-6 animate-fade-up pb-16">
@@ -222,8 +274,8 @@ export default function InvoiceForm() {
             <Input value={customer.gstin} onChange={(e) => setCustomer({ ...customer, gstin: e.target.value.toUpperCase() })} placeholder="24XXXXX…" data-testid="customer-gstin-input" />
             <div className="text-[11px] mt-1 font-mono">
               {customer.gstin ? (
-                intra ? <span className="text-emerald-600">Intra-state (Gujarat) → CGST + SGST</span> : <span className="text-blue-600">Inter-state → IGST</span>
-              ) : <span className="text-slate-400">Unregistered → IGST</span>}
+                intra ? <span className="text-emerald-600">Intra-state → CGST + SGST</span> : <span className="text-blue-600">Inter-state → IGST</span>
+              ) : <span className="text-slate-400">Unregistered — set Place of Supply</span>}
             </div>
           </Field>
           <Field label="Phone">
@@ -234,6 +286,33 @@ export default function InvoiceForm() {
           </Field>
           <Field label="Address" className="md:col-span-2">
             <Textarea rows={2} value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} />
+          </Field>
+        </div>
+      </Card>
+
+      {/* Place of Supply */}
+      <Card className="p-5 border-slate-200 rounded-md">
+        <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 mb-3">Place of Supply (PoS)</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Field label="Destination State *">
+            <Select value={pos.code} onValueChange={(v) => setPos({ code: v, state: stateName(v) })}>
+              <SelectTrigger data-testid="pos-state"><SelectValue placeholder="Select state…" /></SelectTrigger>
+              <SelectContent className="max-h-72">
+                {INDIAN_STATES.map((s) => <SelectItem key={s.code} value={s.code}>{s.code} — {s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="State Code">
+            <Input value={pos.code} readOnly className="bg-slate-50 font-mono" />
+          </Field>
+          <Field label="Determination">
+            <div className="text-[12px] mt-2 font-mono">
+              {pos.code ? (
+                intra
+                  ? <span className="text-emerald-600">Intra-state ({stateName(pos.code)}) → CGST + SGST</span>
+                  : <span className="text-blue-600">Inter-state → IGST</span>
+              ) : <span className="text-slate-400">Pick a state to determine GST</span>}
+            </div>
           </Field>
         </div>
       </Card>
@@ -275,7 +354,7 @@ export default function InvoiceForm() {
                 <tr key={i} className="border-t border-slate-100 align-top">
                   <td className="px-3 py-2 text-slate-400 font-mono">{i + 1}</td>
                   <td className="px-3 py-2"><Input value={it.description} onChange={(e) => updateItem(i, { description: e.target.value })} data-testid={`item-desc-${i}`} placeholder="Service / article" /></td>
-                  <td className="px-3 py-2"><Input value={it.hsn} onChange={(e) => updateItem(i, { hsn: e.target.value })} data-testid={`item-hsn-${i}`} /></td>
+                  <td className="px-3 py-2"><Input value={it.hsn} onChange={(e) => updateItem(i, { hsn: e.target.value })} onBlur={() => onHsnBlur(i)} data-testid={`item-hsn-${i}`} /></td>
                   <td className="px-3 py-2"><Input type="number" min="0" step="0.01" className="text-right font-mono" value={it.quantity} onChange={(e) => updateItem(i, { quantity: e.target.value })} data-testid={`item-qty-${i}`} /></td>
                   <td className="px-3 py-2">
                     <Select value={it.unit} onValueChange={(v) => updateItem(i, { unit: v })}>

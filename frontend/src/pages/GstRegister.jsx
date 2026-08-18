@@ -1,0 +1,231 @@
+import React, { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+import { FileSpreadsheet, Download, Filter } from "lucide-react";
+import { fmtINRWithSymbol } from "@/lib/gst";
+import { INDIAN_STATES, stateName } from "@/lib/india";
+
+const RATES = ["", "0", "0.1", "0.25", "3", "5", "12", "18", "28"];
+const FY_LIST = () => {
+  const today = new Date();
+  const y = today.getFullYear();
+  const list = [];
+  for (let i = -2; i <= 1; i++) {
+    const s = y + i;
+    list.push({ value: `${s}-${String(s + 1).slice(2)}`, label: `${s}-${String(s + 1).slice(2)}` });
+  }
+  return list;
+};
+
+const fyToRange = (fy) => {
+  if (!fy) return { from: "", to: "" };
+  const [a, b] = fy.split("-");
+  const start = a;
+  const end = (Number(a) + 1).toString();
+  return { from: `${start}-04-01`, to: `${end}-03-31` };
+};
+
+export default function GstRegister() {
+  const [fy, setFy] = useState(FY_LIST()[2].value);
+  const [month, setMonth] = useState("");
+  const [customer, setCustomer] = useState("");
+  const [state, setState] = useState("");
+  const [gstRate, setGstRate] = useState("");
+  const [hsn, setHsn] = useState("");
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const build = () => {
+    const { from, to } = fyToRange(fy);
+    let f = from, t = to;
+    if (month) {
+      const [y, mm] = month.split("-");
+      const start = `${y}-${mm.padStart(2, "0")}-01`;
+      const endDay = new Date(Number(y), Number(mm), 0).getDate();
+      const end = `${y}-${mm.padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
+      f = start; t = end;
+    }
+    const params = new URLSearchParams();
+    if (f) params.set("from_date", f);
+    if (t) params.set("to_date", t);
+    if (customer) params.set("customer", customer);
+    if (state && state !== "__all__") params.set("state", stateName(state));
+    if (gstRate && gstRate !== "__all__") params.set("gst_rate", gstRate);
+    if (hsn) params.set("hsn", hsn);
+    return params;
+  };
+
+  const run = async () => {
+    setLoading(true);
+    try {
+      const params = build();
+      const r = await api.get(`/reports/gst-sales-register?${params.toString()}`);
+      setRows(r.data.rows || []);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to load register");
+    } finally { setLoading(false); }
+  };
+
+  const exportCsv = async () => {
+    try {
+      const params = build();
+      params.set("fmt", "csv");
+      const r = await api.get(`/reports/gst-sales-register?${params.toString()}`, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([r.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `gst_sales_register_${fy || "all"}${month ? `_${month}` : ""}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { toast.error("Export failed"); }
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { run(); }, []);
+
+  const totals = rows.reduce((a, r) => ({
+    taxable: a.taxable + Number(r.taxable_value || 0),
+    cgst: a.cgst + Number(r.cgst || 0),
+    sgst: a.sgst + Number(r.sgst || 0),
+    igst: a.igst + Number(r.igst || 0),
+    invoice_value: a.invoice_value + Number(r.invoice_value || 0),
+  }), { taxable: 0, cgst: 0, sgst: 0, igst: 0, invoice_value: 0 });
+
+  return (
+    <div className="space-y-6 animate-fade-up">
+      <header className="flex items-end justify-between flex-wrap gap-4">
+        <div>
+          <div className="text-xs uppercase tracking-[0.25em] text-slate-500 mb-2">Working Export</div>
+          <h1 className="text-4xl font-heading font-semibold tracking-tight text-slate-900 flex items-center gap-3">
+            <FileSpreadsheet className="w-8 h-8 text-blue-600" /> GST Sales Register
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            One row per line item. Working export toward GSTR — not a filing file yet.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={run} data-testid="gst-register-apply" className="gap-2">
+            <Filter className="w-4 h-4" /> Apply Filters
+          </Button>
+          <Button onClick={exportCsv} data-testid="gst-register-export" className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+            <Download className="w-4 h-4" /> Export CSV
+          </Button>
+        </div>
+      </header>
+
+      <Card className="p-4 border-slate-200 rounded-md">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+          <div>
+            <Label>Financial Year</Label>
+            <Select value={fy} onValueChange={setFy}>
+              <SelectTrigger data-testid="reg-fy"><SelectValue /></SelectTrigger>
+              <SelectContent>{FY_LIST().map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Month (optional)</Label>
+            <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} data-testid="reg-month" />
+          </div>
+          <div>
+            <Label>Customer</Label>
+            <Input value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Search…" data-testid="reg-customer" />
+          </div>
+          <div>
+            <Label>State</Label>
+            <Select value={state} onValueChange={setState}>
+              <SelectTrigger data-testid="reg-state"><SelectValue placeholder="Any" /></SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="__all__">Any</SelectItem>
+                {INDIAN_STATES.map((s) => <SelectItem key={s.code} value={s.code}>{s.code} — {s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>GST Rate</Label>
+            <Select value={gstRate} onValueChange={setGstRate}>
+              <SelectTrigger data-testid="reg-rate"><SelectValue placeholder="Any" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Any</SelectItem>
+                {RATES.filter(Boolean).map((r) => <SelectItem key={r} value={r}>{r}%</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>HSN / SAC</Label>
+            <Input value={hsn} onChange={(e) => setHsn(e.target.value)} placeholder="e.g. 998313" data-testid="reg-hsn" />
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-0 border-slate-200 rounded-md overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider">
+              <tr>
+                <th className="px-3 py-2 text-left">Invoice #</th>
+                <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-left">Customer</th>
+                <th className="px-3 py-2 text-left">GSTIN</th>
+                <th className="px-3 py-2 text-left">Place of Supply</th>
+                <th className="px-3 py-2 text-left">HSN</th>
+                <th className="px-3 py-2 text-left">Description</th>
+                <th className="px-3 py-2 text-right">Taxable</th>
+                <th className="px-3 py-2 text-right">Rate</th>
+                <th className="px-3 py-2 text-right">CGST</th>
+                <th className="px-3 py-2 text-right">SGST</th>
+                <th className="px-3 py-2 text-right">IGST</th>
+                <th className="px-3 py-2 text-right">Invoice Value</th>
+                <th className="px-3 py-2 text-left">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && <tr><td colSpan="14" className="px-3 py-10 text-center text-slate-400">Loading…</td></tr>}
+              {!loading && rows.length === 0 && (
+                <tr><td colSpan="14" className="px-3 py-14 text-center text-slate-400">
+                  No rows for the selected filters.
+                </td></tr>
+              )}
+              {rows.map((r, i) => (
+                <tr key={i} className="border-t border-slate-100 hover:bg-slate-50" data-testid={`reg-row-${i}`}>
+                  <td className="px-3 py-2 font-mono">{r.invoice_number}</td>
+                  <td className="px-3 py-2 font-mono">{r.invoice_date}</td>
+                  <td className="px-3 py-2">{r.customer}</td>
+                  <td className="px-3 py-2 font-mono text-slate-600">{r.customer_gstin || "—"}</td>
+                  <td className="px-3 py-2">{r.place_of_supply_code} · {r.place_of_supply_state}</td>
+                  <td className="px-3 py-2 font-mono">{r.hsn || "—"}</td>
+                  <td className="px-3 py-2 max-w-[220px] truncate">{r.description}</td>
+                  <td className="px-3 py-2 text-right font-mono">{fmtINRWithSymbol(r.taxable_value)}</td>
+                  <td className="px-3 py-2 text-right">{Number(r.gst_rate).toFixed(2)}%</td>
+                  <td className="px-3 py-2 text-right font-mono">{fmtINRWithSymbol(r.cgst)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{fmtINRWithSymbol(r.sgst)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{fmtINRWithSymbol(r.igst)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-semibold">{fmtINRWithSymbol(r.invoice_value)}</td>
+                  <td className="px-3 py-2 capitalize">{r.status?.replace("_", " ")}</td>
+                </tr>
+              ))}
+            </tbody>
+            {rows.length > 0 && (
+              <tfoot>
+                <tr className="bg-slate-900 text-slate-100 font-mono">
+                  <td colSpan="7" className="px-3 py-2 text-right uppercase text-[10px] tracking-wider">Totals</td>
+                  <td className="px-3 py-2 text-right">{fmtINRWithSymbol(totals.taxable)}</td>
+                  <td></td>
+                  <td className="px-3 py-2 text-right">{fmtINRWithSymbol(totals.cgst)}</td>
+                  <td className="px-3 py-2 text-right">{fmtINRWithSymbol(totals.sgst)}</td>
+                  <td className="px-3 py-2 text-right">{fmtINRWithSymbol(totals.igst)}</td>
+                  <td className="px-3 py-2 text-right">{fmtINRWithSymbol(totals.invoice_value)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}

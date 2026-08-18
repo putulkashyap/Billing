@@ -39,6 +39,20 @@ Build a full-stack, production-ready GST Billing & Account Reconciliation web ap
 ## 2026-02 · Data Maintenance
 - ✅ DB cleanup verified: 1 invoice kept (`TE/2026-27/0001`, ₹44,200, IGST ₹6,742.37), 0 credit notes, counter `invoice_2026-27.seq=1` → next invoice `TE/2026-27/0002`. No code/UI/master data changes.
 
+## 2026-02 · P2 — Customer/Vendor Fix + GST Foundation
+- ✅ Extended `Customer` schema: trade_name, customer_type, PAN, gst_reg_type, state+state_code, billing/shipping, contact_person, mobile, payment_terms, active. Backward-compat aliases for `address`/`phone`.
+- ✅ **New Vendor master** (`/api/vendors` + `/vendors` page) — CRUD + duplicate GSTIN protection.
+- ✅ **HSN/SAC master** (`/api/hsn` + `/hsn` page) — code, description, gst/cgst/sgst/igst/cess rates, taxability, ITC, effective_from/to, active. Auto-splits half-rate for CGST/SGST.
+- ✅ **Company Settings singleton** (`/api/company` + `/settings` page) — supplier legal identity, GSTIN, PoS origin state, bank details. Auto-seeded with TRAYAMBAK details.
+- ✅ **GST engine refactor**: PoS-based determination via `resolve_intra_state(customer, place_of_supply_code, supplier_state_code)`. Legacy GSTIN-prefix rule kept only as fallback.
+- ✅ **Place of Supply** on invoice (`place_of_supply_state`, `place_of_supply_code`), captured in UI with a state select. Existing invoice `TE/2026-27/0001` left untouched (PoS blank, still computes IGST correctly via GSTIN fallback).
+- ✅ **GSTIN format validation** + normalization to uppercase.
+- ✅ **Duplicate GSTIN protection** — 409 with a human-readable message for both customers and vendors.
+- ✅ **HSN autofill in InvoiceForm**: typing an HSN pulls the configured rate; save is blocked if the line rate diverges from master.
+- ✅ **GST Sales Register** (`/api/reports/gst-sales-register` + `/gst-register` page) — one row per line item, filters (FY, month, customer, state, GST rate, HSN), CSV export.
+- ✅ **Expenses form**: added optional vendor picker that auto-fills name+GSTIN from Vendor master.
+- ✅ Regression suite `/app/backend/tests/test_p2_masters_and_gst.py` (12 tests, all passing).
+
 ## Verified Tests
 - Backend: 100% (9/9 pytest — auth, GJ CGST+SGST, MH IGST, partial/full payments, summary aggregates, staff create+login, RBAC 403)
 - Frontend: 100% (login → dashboard → new invoice with live totals ₹11,800 → save → preview with 3 templates → reconciliation payment)

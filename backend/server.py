@@ -109,21 +109,153 @@ class UserCreate(BaseModel):
 class Customer(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
+    name: str  # legal name — kept as primary display for backward compat
+    trade_name: Optional[str] = ""
+    customer_type: Optional[str] = "b2b"  # b2b / b2c / gov / gem
     gstin: Optional[str] = ""
+    pan: Optional[str] = ""
+    gst_reg_type: Optional[str] = "regular"  # regular / composition / unregistered / other
+    state: Optional[str] = ""
     state_code: Optional[str] = ""
-    address: Optional[str] = ""
-    phone: Optional[str] = ""
+    billing_address: Optional[str] = ""
+    shipping_address: Optional[str] = ""
+    address: Optional[str] = ""  # legacy field kept for backward compat
+    contact_person: Optional[str] = ""
+    mobile: Optional[str] = ""
+    phone: Optional[str] = ""  # legacy alias
     email: Optional[str] = ""
+    payment_terms: Optional[str] = ""
+    active: bool = True
     created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
 
 
 class CustomerCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     name: str
+    trade_name: Optional[str] = ""
+    customer_type: Optional[str] = "b2b"
     gstin: Optional[str] = ""
+    pan: Optional[str] = ""
+    gst_reg_type: Optional[str] = "regular"
+    state: Optional[str] = ""
+    state_code: Optional[str] = ""
+    billing_address: Optional[str] = ""
+    shipping_address: Optional[str] = ""
     address: Optional[str] = ""
+    contact_person: Optional[str] = ""
+    mobile: Optional[str] = ""
     phone: Optional[str] = ""
     email: Optional[str] = ""
+    payment_terms: Optional[str] = ""
+    active: Optional[bool] = True
+
+
+class Vendor(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    trade_name: Optional[str] = ""
+    gstin: Optional[str] = ""
+    pan: Optional[str] = ""
+    gst_reg_type: Optional[str] = "regular"
+    state: Optional[str] = ""
+    state_code: Optional[str] = ""
+    billing_address: Optional[str] = ""
+    shipping_address: Optional[str] = ""
+    contact_person: Optional[str] = ""
+    mobile: Optional[str] = ""
+    email: Optional[str] = ""
+    payment_terms: Optional[str] = ""
+    active: bool = True
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class VendorCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    name: str
+    trade_name: Optional[str] = ""
+    gstin: Optional[str] = ""
+    pan: Optional[str] = ""
+    gst_reg_type: Optional[str] = "regular"
+    state: Optional[str] = ""
+    state_code: Optional[str] = ""
+    billing_address: Optional[str] = ""
+    shipping_address: Optional[str] = ""
+    contact_person: Optional[str] = ""
+    mobile: Optional[str] = ""
+    email: Optional[str] = ""
+    payment_terms: Optional[str] = ""
+    active: Optional[bool] = True
+
+
+class HsnMaster(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    code: str
+    description: str = ""
+    gst_rate: float = 18.0  # convenience aggregate; must equal cgst+sgst or igst
+    cgst_rate: float = 9.0
+    sgst_rate: float = 9.0
+    igst_rate: float = 18.0
+    cess_rate: float = 0.0
+    taxability: str = "taxable"  # taxable / exempt / nil_rated / zero_rated
+    itc_eligible: bool = True
+    effective_from: Optional[str] = ""
+    effective_to: Optional[str] = ""
+    active: bool = True
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class HsnCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    code: str
+    description: Optional[str] = ""
+    gst_rate: Optional[float] = 18.0
+    cess_rate: Optional[float] = 0.0
+    taxability: Optional[str] = "taxable"
+    itc_eligible: Optional[bool] = True
+    effective_from: Optional[str] = ""
+    effective_to: Optional[str] = ""
+    active: Optional[bool] = True
+
+
+class CompanySettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = "singleton"
+    legal_name: str = "TRAYAMBAK ENTERPRISE"
+    trade_name: str = "Trayambak Enterprise"
+    gstin: str = "24AMAPR1170Q1ZT"
+    pan: str = "AMAPR1170Q"
+    state: str = "Gujarat"
+    state_code: str = "24"
+    address: str = ""
+    email: str = ""
+    phone: str = ""
+    bank_name: str = "IDFC FIRST Bank"
+    bank_account: str = "69315494820"
+    bank_ifsc: str = "IDFB0042392"
+    bank_branch: str = "Vadodara-Gotri"
+    updated_at: str = Field(default_factory=now_iso)
+
+
+class CompanyUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    legal_name: Optional[str] = None
+    trade_name: Optional[str] = None
+    gstin: Optional[str] = None
+    pan: Optional[str] = None
+    state: Optional[str] = None
+    state_code: Optional[str] = None
+    address: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    bank_branch: Optional[str] = None
 
 
 class LineItem(BaseModel):
@@ -164,6 +296,8 @@ class Invoice(BaseModel):
     invoice_date: str
     customer: dict  # snapshot
     line_items: List[dict]
+    place_of_supply_state: Optional[str] = ""
+    place_of_supply_code: Optional[str] = ""
     subtotal: float
     total_discount: float
     taxable_amount: float
@@ -194,6 +328,8 @@ class InvoiceCreate(BaseModel):
     invoice_date: str
     customer: dict
     line_items: List[LineItem]
+    place_of_supply_state: Optional[str] = ""
+    place_of_supply_code: Optional[str] = ""
     notes: Optional[str] = ""
 
 
@@ -242,8 +378,39 @@ def is_gujarat_gstin(gstin: str) -> bool:
     return bool(gstin) and gstin.strip().startswith("24")
 
 
-def compute_invoice_totals(customer: dict, items: List[LineItem]) -> dict:
-    intra = is_gujarat_gstin(customer.get("gstin", ""))
+def gstin_state_code(gstin: str) -> str:
+    g = (gstin or "").strip()
+    return g[:2] if len(g) >= 2 and g[:2].isdigit() else ""
+
+
+def validate_gstin_format(gstin: str) -> bool:
+    """Return True for a well-formed 15-char GSTIN (permissive check).
+    Format: 2 digit state + 10 char PAN + 1 entity + 1 default 'Z' + 1 checksum."""
+    import re
+    g = (gstin or "").strip().upper()
+    if not g:
+        return False
+    return bool(re.match(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$", g))
+
+
+def resolve_intra_state(customer: dict, place_of_supply_code: str, supplier_state_code: str = "24") -> bool:
+    """Decide intra vs inter state.
+    Priority: place_of_supply_code (explicit) → customer.state_code → GSTIN prefix (legacy)."""
+    pos = (place_of_supply_code or "").strip()
+    if not pos:
+        pos = (customer.get("state_code") or "").strip()
+    if not pos:
+        pos = gstin_state_code(customer.get("gstin", ""))
+    if not pos:
+        # Unregistered without state hint → default to inter-state
+        return False
+    return pos == (supplier_state_code or "24")
+
+
+def compute_invoice_totals(customer: dict, items: List[LineItem],
+                           place_of_supply_code: str = "",
+                           supplier_state_code: str = "24") -> dict:
+    intra = resolve_intra_state(customer, place_of_supply_code, supplier_state_code)
     subtotal = 0.0
     total_discount = 0.0
     taxable = 0.0
@@ -253,7 +420,6 @@ def compute_invoice_totals(customer: dict, items: List[LineItem]) -> dict:
         subtotal += line_gross
         total_discount += it.discount
         if it.price_type == "inclusive":
-            # rate is inclusive of tax; extract taxable backwards
             billed = line_gross - it.discount
             line_taxable = billed / (1 + it.tax_rate / 100.0) if it.tax_rate else billed
             tax_amt = billed - line_taxable
@@ -331,6 +497,9 @@ async def on_startup():
     await db.users.create_index("email", unique=True)
     await db.invoices.create_index("invoice_number", unique=True)
     await db.credit_notes.create_index("credit_note_number", unique=True)
+    await db.hsn_master.create_index("code", unique=True)
+    # seed company settings if missing
+    await _load_company()
 
 
 # ---------- Auth routes ----------
@@ -397,12 +566,56 @@ async def list_customers(user=Depends(get_current_user)):
     return docs
 
 
+def _normalize_customer_input(inp_dict: dict) -> dict:
+    """Uppercase GSTIN/PAN, backfill state_code from GSTIN, unify legacy phone/mobile,address/billing_address."""
+    d = dict(inp_dict)
+    gstin = (d.get("gstin") or "").strip().upper()
+    d["gstin"] = gstin
+    pan = (d.get("pan") or "").strip().upper()
+    d["pan"] = pan
+    # state_code: prefer explicit, else derive from GSTIN
+    sc = (d.get("state_code") or "").strip()
+    if not sc:
+        sc = gstin_state_code(gstin)
+    d["state_code"] = sc
+    # mobile <-> phone alias
+    if not d.get("mobile") and d.get("phone"):
+        d["mobile"] = d["phone"]
+    if not d.get("phone") and d.get("mobile"):
+        d["phone"] = d["mobile"]
+    # billing_address <-> address alias
+    if not d.get("billing_address") and d.get("address"):
+        d["billing_address"] = d["address"]
+    if not d.get("address") and d.get("billing_address"):
+        d["address"] = d["billing_address"]
+    return d
+
+
+def _validate_gstin_for_party(gstin: str, gst_reg_type: str) -> None:
+    """Raise 400 if a registered party has an invalid GSTIN. Unregistered/other allowed empty."""
+    t = (gst_reg_type or "").lower()
+    if t in ("regular", "composition"):
+        if not gstin:
+            raise HTTPException(status_code=400, detail="GSTIN is required for a registered party.")
+        if not validate_gstin_format(gstin):
+            raise HTTPException(status_code=400, detail=f"GSTIN '{gstin}' is not in a valid format.")
+    else:
+        # Unregistered/other: if GSTIN provided at all, validate; else ignore.
+        if gstin and not validate_gstin_format(gstin):
+            raise HTTPException(status_code=400, detail=f"GSTIN '{gstin}' is not in a valid format.")
+
+
 @api.post("/customers")
 async def create_customer(inp: CustomerCreate, user=Depends(get_current_user)):
-    c = Customer(**inp.model_dump())
-    state_code = c.gstin[:2] if c.gstin else ""
+    data = _normalize_customer_input(inp.model_dump())
+    _validate_gstin_for_party(data.get("gstin", ""), data.get("gst_reg_type", "regular"))
+    # Duplicate GSTIN protection (for registered only)
+    if data.get("gstin"):
+        dup = await db.customers.find_one({"gstin": data["gstin"]})
+        if dup:
+            raise HTTPException(status_code=409, detail=f"A customer with GSTIN {data['gstin']} already exists.")
+    c = Customer(**data)
     doc = c.model_dump()
-    doc["state_code"] = state_code
     await db.customers.insert_one(doc)
     doc.pop("_id", None)
     return doc
@@ -410,9 +623,15 @@ async def create_customer(inp: CustomerCreate, user=Depends(get_current_user)):
 
 @api.put("/customers/{cid}")
 async def update_customer(cid: str, inp: CustomerCreate, user=Depends(get_current_user)):
-    upd = inp.model_dump()
-    upd["state_code"] = upd["gstin"][:2] if upd["gstin"] else ""
-    r = await db.customers.update_one({"id": cid}, {"$set": upd})
+    data = _normalize_customer_input(inp.model_dump())
+    _validate_gstin_for_party(data.get("gstin", ""), data.get("gst_reg_type", "regular"))
+    # Duplicate GSTIN protection (excluding self)
+    if data.get("gstin"):
+        dup = await db.customers.find_one({"gstin": data["gstin"], "id": {"$ne": cid}})
+        if dup:
+            raise HTTPException(status_code=409, detail=f"Another customer with GSTIN {data['gstin']} already exists.")
+    data["updated_at"] = now_iso()
+    r = await db.customers.update_one({"id": cid}, {"$set": data})
     if r.matched_count == 0:
         raise HTTPException(status_code=404, detail="Customer not found")
     doc = await db.customers.find_one({"id": cid}, {"_id": 0})
@@ -423,6 +642,147 @@ async def update_customer(cid: str, inp: CustomerCreate, user=Depends(get_curren
 async def delete_customer(cid: str, user=Depends(require_admin)):
     await db.customers.delete_one({"id": cid})
     return {"ok": True}
+
+
+# ---------- Vendors ----------
+@api.get("/vendors")
+async def list_vendors(user=Depends(get_current_user)):
+    docs = await db.vendors.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return docs
+
+
+@api.post("/vendors")
+async def create_vendor(inp: VendorCreate, user=Depends(get_current_user)):
+    data = _normalize_customer_input(inp.model_dump())
+    _validate_gstin_for_party(data.get("gstin", ""), data.get("gst_reg_type", "regular"))
+    if data.get("gstin"):
+        dup = await db.vendors.find_one({"gstin": data["gstin"]})
+        if dup:
+            raise HTTPException(status_code=409, detail=f"A vendor with GSTIN {data['gstin']} already exists.")
+    v = Vendor(**data)
+    doc = v.model_dump()
+    await db.vendors.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/vendors/{vid}")
+async def update_vendor(vid: str, inp: VendorCreate, user=Depends(get_current_user)):
+    data = _normalize_customer_input(inp.model_dump())
+    _validate_gstin_for_party(data.get("gstin", ""), data.get("gst_reg_type", "regular"))
+    if data.get("gstin"):
+        dup = await db.vendors.find_one({"gstin": data["gstin"], "id": {"$ne": vid}})
+        if dup:
+            raise HTTPException(status_code=409, detail=f"Another vendor with GSTIN {data['gstin']} already exists.")
+    data["updated_at"] = now_iso()
+    r = await db.vendors.update_one({"id": vid}, {"$set": data})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    doc = await db.vendors.find_one({"id": vid}, {"_id": 0})
+    return doc
+
+
+@api.delete("/vendors/{vid}")
+async def delete_vendor(vid: str, user=Depends(require_admin)):
+    await db.vendors.delete_one({"id": vid})
+    return {"ok": True}
+
+
+# ---------- HSN/SAC master ----------
+@api.get("/hsn")
+async def list_hsn(user=Depends(get_current_user)):
+    docs = await db.hsn_master.find({}, {"_id": 0}).sort("code", 1).to_list(5000)
+    return docs
+
+
+@api.get("/hsn/lookup/{code}")
+async def lookup_hsn(code: str, user=Depends(get_current_user)):
+    doc = await db.hsn_master.find_one({"code": code.strip(), "active": True}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="HSN/SAC not found")
+    return doc
+
+
+def _hsn_from_input(inp: "HsnCreate") -> dict:
+    rate = float(inp.gst_rate or 0.0)
+    half = round(rate / 2.0, 4)
+    return {
+        "code": inp.code.strip(),
+        "description": inp.description or "",
+        "gst_rate": rate,
+        "cgst_rate": half,
+        "sgst_rate": half,
+        "igst_rate": rate,
+        "cess_rate": float(inp.cess_rate or 0.0),
+        "taxability": inp.taxability or "taxable",
+        "itc_eligible": bool(inp.itc_eligible),
+        "effective_from": inp.effective_from or "",
+        "effective_to": inp.effective_to or "",
+        "active": bool(inp.active) if inp.active is not None else True,
+    }
+
+
+@api.post("/hsn")
+async def create_hsn(inp: HsnCreate, user=Depends(require_admin)):
+    if not inp.code or not inp.code.strip():
+        raise HTTPException(status_code=400, detail="HSN/SAC code is required.")
+    if await db.hsn_master.find_one({"code": inp.code.strip()}):
+        raise HTTPException(status_code=409, detail=f"HSN/SAC {inp.code} already exists.")
+    data = _hsn_from_input(inp)
+    h = HsnMaster(**data)
+    doc = h.model_dump()
+    await db.hsn_master.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/hsn/{hid}")
+async def update_hsn(hid: str, inp: HsnCreate, user=Depends(require_admin)):
+    data = _hsn_from_input(inp)
+    data["updated_at"] = now_iso()
+    dup = await db.hsn_master.find_one({"code": data["code"], "id": {"$ne": hid}})
+    if dup:
+        raise HTTPException(status_code=409, detail=f"HSN/SAC {data['code']} already exists.")
+    r = await db.hsn_master.update_one({"id": hid}, {"$set": data})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="HSN not found")
+    doc = await db.hsn_master.find_one({"id": hid}, {"_id": 0})
+    return doc
+
+
+@api.delete("/hsn/{hid}")
+async def delete_hsn(hid: str, user=Depends(require_admin)):
+    await db.hsn_master.delete_one({"id": hid})
+    return {"ok": True}
+
+
+# ---------- Company settings ----------
+async def _load_company() -> dict:
+    doc = await db.company_settings.find_one({"id": "singleton"}, {"_id": 0})
+    if not doc:
+        cs = CompanySettings().model_dump()
+        await db.company_settings.insert_one(cs)
+        doc = cs
+    return doc
+
+
+@api.get("/company")
+async def get_company(user=Depends(get_current_user)):
+    return await _load_company()
+
+
+@api.put("/company")
+async def update_company(inp: CompanyUpdate, user=Depends(require_admin)):
+    upd = {k: v for k, v in inp.model_dump().items() if v is not None}
+    if "gstin" in upd:
+        upd["gstin"] = (upd["gstin"] or "").strip().upper()
+        if upd["gstin"] and not validate_gstin_format(upd["gstin"]):
+            raise HTTPException(status_code=400, detail="Company GSTIN is not in a valid format.")
+        if upd["gstin"] and not upd.get("state_code"):
+            upd["state_code"] = gstin_state_code(upd["gstin"])
+    upd["updated_at"] = now_iso()
+    await db.company_settings.update_one({"id": "singleton"}, {"$set": upd}, upsert=True)
+    return await _load_company()
 
 
 # ---------- Invoices ----------
@@ -442,7 +802,11 @@ async def get_invoice(iid: str, user=Depends(get_current_user)):
 
 @api.post("/invoices")
 async def create_invoice(inp: InvoiceCreate, user=Depends(get_current_user)):
-    totals = compute_invoice_totals(inp.customer, inp.line_items)
+    company = await _load_company()
+    supplier_state_code = company.get("state_code", "24")
+    pos_code = inp.place_of_supply_code or (inp.customer.get("state_code") or gstin_state_code(inp.customer.get("gstin", "")))
+    pos_state = inp.place_of_supply_state or inp.customer.get("state", "")
+    totals = compute_invoice_totals(inp.customer, inp.line_items, pos_code, supplier_state_code)
     inv_no = await next_invoice_number()
     inv = Invoice(
         invoice_number=inv_no,
@@ -456,6 +820,8 @@ async def create_invoice(inp: InvoiceCreate, user=Depends(get_current_user)):
         invoice_date=inp.invoice_date,
         customer=inp.customer,
         line_items=[li.model_dump() for li in inp.line_items],
+        place_of_supply_state=pos_state,
+        place_of_supply_code=pos_code,
         notes=inp.notes or "",
         created_by=user["id"],
         balance=totals["grand_total"],
@@ -502,7 +868,11 @@ async def update_invoice(iid: str, inp: InvoiceCreate, user=Depends(get_current_
         raise HTTPException(status_code=404, detail="Invoice not found")
     if inv.get("status") == "paid":
         raise HTTPException(status_code=400, detail="Paid invoices cannot be edited")
-    totals = compute_invoice_totals(inp.customer, inp.line_items)
+    company = await _load_company()
+    supplier_state_code = company.get("state_code", "24")
+    pos_code = inp.place_of_supply_code or (inp.customer.get("state_code") or gstin_state_code(inp.customer.get("gstin", ""))) or inv.get("place_of_supply_code", "")
+    pos_state = inp.place_of_supply_state or inp.customer.get("state", "") or inv.get("place_of_supply_state", "")
+    totals = compute_invoice_totals(inp.customer, inp.line_items, pos_code, supplier_state_code)
     amount_paid = float(inv.get("amount_paid", 0.0))
     credits = float(inv.get("credits_applied", 0.0))
     balance = round(totals["grand_total"] - amount_paid - credits, 2)
@@ -524,6 +894,8 @@ async def update_invoice(iid: str, inp: InvoiceCreate, user=Depends(get_current_
         "invoice_date": inp.invoice_date,
         "customer": inp.customer,
         "line_items": [li.model_dump() for li in inp.line_items],
+        "place_of_supply_state": pos_state,
+        "place_of_supply_code": pos_code,
         "notes": inp.notes or "",
         "balance": balance,
         "status": status_str,
@@ -560,7 +932,11 @@ async def create_credit_note(inp: CreditNoteCreate, user=Depends(get_current_use
     inv = await db.invoices.find_one({"id": inp.invoice_id}, {"_id": 0})
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    totals = compute_invoice_totals(inv["customer"], inp.line_items)
+    totals = compute_invoice_totals(
+        inv["customer"], inp.line_items,
+        inv.get("place_of_supply_code", ""),
+        (await _load_company()).get("state_code", "24"),
+    )
     grand = totals["grand_total"]
     # Guardrail: credit cannot exceed the remaining invoice value net of prior credits
     existing_credits = float(inv.get("credits_applied", 0.0))
@@ -965,6 +1341,89 @@ async def gst_settlement(from_date: Optional[str] = None, to_date: Optional[str]
         "input_tax_credit": {"cgst": itc_cgst, "sgst": itc_sgst, "igst": itc_igst, "total": r(itc_cgst + itc_sgst + itc_igst)},
         "net_liability": {"cgst": net_cgst, "sgst": net_sgst, "igst": net_igst, "total": r(net_cgst + net_sgst + net_igst)},
     }
+
+
+@api.get("/reports/gst-sales-register")
+async def gst_sales_register(from_date: Optional[str] = None, to_date: Optional[str] = None,
+                             customer: Optional[str] = None, state: Optional[str] = None,
+                             gst_rate: Optional[float] = None, hsn: Optional[str] = None,
+                             fmt: Optional[str] = "json", user=Depends(get_current_user)):
+    """GST Sales Register / GSTR Working Export (one row per line item)."""
+    q = {}
+    if from_date:
+        q.setdefault("invoice_date", {})["$gte"] = from_date
+    if to_date:
+        q.setdefault("invoice_date", {})["$lte"] = to_date
+    if customer:
+        q["customer.name"] = {"$regex": customer, "$options": "i"}
+    if state:
+        # match place_of_supply_state OR fallback to customer.state
+        q["$or"] = [
+            {"place_of_supply_state": {"$regex": state, "$options": "i"}},
+            {"customer.state": {"$regex": state, "$options": "i"}},
+        ]
+    docs = await db.invoices.find(q, {"_id": 0}).sort("invoice_date", 1).to_list(10000)
+    rows = []
+    for d in docs:
+        items = d.get("line_items") or [{}]
+        # Compute per-line contribution of totals (proportional to taxable)
+        total_taxable = sum(_line_taxable(li) for li in items) or 1.0
+        for li in items:
+            line_tax = _line_taxable(li)
+            weight = line_tax / total_taxable if total_taxable else 0
+            cgst = round(d.get("cgst", 0) * weight, 2)
+            sgst = round(d.get("sgst", 0) * weight, 2)
+            igst = round(d.get("igst", 0) * weight, 2)
+            invoice_value = round(line_tax + cgst + sgst + igst, 2)
+            row = {
+                "invoice_number": d.get("invoice_number"),
+                "invoice_date": d.get("invoice_date"),
+                "customer": (d.get("customer") or {}).get("name", ""),
+                "customer_gstin": (d.get("customer") or {}).get("gstin", ""),
+                "place_of_supply_state": d.get("place_of_supply_state") or (d.get("customer") or {}).get("state", ""),
+                "place_of_supply_code": d.get("place_of_supply_code") or (d.get("customer") or {}).get("state_code", ""),
+                "hsn": li.get("hsn", ""),
+                "description": li.get("description", ""),
+                "invoice_value": invoice_value,
+                "taxable_value": round(line_tax, 2),
+                "gst_rate": li.get("tax_rate", 0),
+                "cgst": cgst,
+                "sgst": sgst,
+                "igst": igst,
+                "cess": 0.0,
+                "status": d.get("status", ""),
+            }
+            if gst_rate is not None and float(row["gst_rate"]) != float(gst_rate):
+                continue
+            if hsn and hsn.strip() and row["hsn"] != hsn.strip():
+                continue
+            rows.append(row)
+    if (fmt or "").lower() == "csv":
+        import io, csv
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()) if rows else [
+            "invoice_number", "invoice_date", "customer", "customer_gstin",
+            "place_of_supply_state", "place_of_supply_code", "hsn", "description",
+            "invoice_value", "taxable_value", "gst_rate", "cgst", "sgst", "igst", "cess", "status"])
+        w.writeheader()
+        for r in rows:
+            w.writerow(r)
+        from fastapi.responses import Response
+        return Response(content=buf.getvalue(), media_type="text/csv",
+                        headers={"Content-Disposition": "attachment; filename=gst_sales_register.csv"})
+    return {"rows": rows, "count": len(rows)}
+
+
+def _line_taxable(li: dict) -> float:
+    qty = float(li.get("quantity", 0) or 0)
+    rate = float(li.get("rate", 0) or 0)
+    disc = float(li.get("discount", 0) or 0)
+    gross = qty * rate
+    billed = gross - disc
+    tax_rate = float(li.get("tax_rate", 0) or 0)
+    if (li.get("price_type", "exclusive")) == "inclusive":
+        return round(billed / (1 + tax_rate / 100.0), 2) if tax_rate else round(billed, 2)
+    return round(billed, 2)
 
 
 @api.get("/reports/pnl")

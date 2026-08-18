@@ -2,7 +2,7 @@ import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { LogoSVG } from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
-import { LayoutDashboard, FileText, Users, Wallet, UserCog, LogOut, PlusCircle, FileMinus, Receipt, BarChart3 } from "lucide-react";
+import { LayoutDashboard, FileText, Users, Wallet, UserCog, LogOut, PlusCircle, FileMinus, Receipt, BarChart3, Truck, Boxes, Building2, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
@@ -12,7 +12,11 @@ const NAV = [
   { to: "/expenses", label: "Expenses", icon: Receipt, testid: "nav-expenses" },
   { to: "/reconciliation", label: "Reconciliation", icon: Wallet, testid: "nav-reconciliation" },
   { to: "/reports", label: "Reports", icon: BarChart3, testid: "nav-reports" },
+  { to: "/gst-register", label: "GST Register", icon: FileSpreadsheet, testid: "nav-gst-register" },
   { to: "/customers", label: "Customers", icon: Users, testid: "nav-customers" },
+  { to: "/vendors", label: "Vendors", icon: Truck, testid: "nav-vendors" },
+  { to: "/hsn", label: "HSN / SAC", icon: Boxes, testid: "nav-hsn" },
+  { to: "/settings", label: "Company Settings", icon: Building2, testid: "nav-settings", adminOnly: true },
   { to: "/staff", label: "Staff", icon: UserCog, testid: "nav-staff", adminOnly: true },
 ];
 

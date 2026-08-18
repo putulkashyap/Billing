@@ -10,8 +10,18 @@ export const fmtINRWithSymbol = (n) => `₹ ${fmtINR(n)}`;
 
 export const isGujaratGSTIN = (gstin) => !!gstin && gstin.trim().startsWith("24");
 
-export function computeTotals(customer, items) {
-  const intra = isGujaratGSTIN(customer?.gstin || "");
+export const gstinStateCode = (g) => {
+  const s = String(g || "").trim();
+  return /^[0-9]{2}/.test(s) ? s.slice(0, 2) : "";
+};
+
+export function computeTotals(party, items, opts = {}) {
+  // party: { gstin?, state_code? }
+  // opts.supplierStateCode: default "24" (Gujarat) for backward compatibility
+  const supplier = opts.supplierStateCode || "24";
+  const pos = String(party?.state_code || "").trim() || gstinStateCode(party?.gstin || "");
+  // If no PoS AND no GSTIN → unregistered → default to inter-state (IGST)
+  const intra = !!pos && pos === supplier;
   let subtotal = 0, total_discount = 0, taxable = 0, cgst = 0, sgst = 0, igst = 0;
   for (const it of items) {
     const qty = Number(it.quantity) || 0;

@@ -21,6 +21,7 @@ const emptyItem = () => ({ description: "", hsn: "", quantity: 1, unit: "Nos", r
 export default function Expenses() {
   const { isAdmin } = useAuth();
   const [list, setList] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [categories, setCategories] = useState([]);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -38,7 +39,17 @@ export default function Expenses() {
   }
 
   const load = () => api.get("/expenses").then((r) => setList(r.data));
-  useEffect(() => { load(); api.get("/expenses/categories").then((r) => setCategories(r.data.categories)).catch(() => {}); }, []);
+  useEffect(() => {
+    load();
+    api.get("/expenses/categories").then((r) => setCategories(r.data.categories)).catch(() => {});
+    api.get("/vendors").then((r) => setVendors(r.data)).catch(() => {});
+  }, []);
+
+  const pickVendor = (vid) => {
+    const v = vendors.find((x) => x.id === vid);
+    if (!v) return;
+    setForm((p) => ({ ...p, vendor_name: v.name, vendor_gstin: v.gstin || "" }));
+  };
 
   const openNew = () => { setEditing(null); setForm(initialForm()); setOpen(true); };
   const openEdit = (e) => {
@@ -195,6 +206,17 @@ export default function Expenses() {
           </DialogHeader>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto te-scroll pr-2">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {vendors.length > 0 && (
+                <div className="md:col-span-3">
+                  <Label>Pick a saved vendor (optional)</Label>
+                  <Select onValueChange={pickVendor}>
+                    <SelectTrigger data-testid="exp-vendor-picker"><SelectValue placeholder="Load from saved vendors…" /></SelectTrigger>
+                    <SelectContent>
+                      {vendors.map((v) => <SelectItem key={v.id} value={v.id}>{v.name}{v.gstin ? ` · ${v.gstin}` : ""}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div><Label>Vendor Name *</Label><Input value={form.vendor_name} onChange={(e) => setForm({ ...form, vendor_name: e.target.value })} data-testid="exp-vendor-name" /></div>
               <div><Label>Vendor GSTIN</Label><Input value={form.vendor_gstin} onChange={(e) => setForm({ ...form, vendor_gstin: e.target.value.toUpperCase() })} data-testid="exp-vendor-gstin" placeholder="24XXXX…" /></div>
               <div>

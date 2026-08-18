@@ -15,6 +15,10 @@ import CreditNotes from "@/pages/CreditNotes";
 import CreditNoteForm from "@/pages/CreditNoteForm";
 import Expenses from "@/pages/Expenses";
 import Reports from "@/pages/Reports";
+import Vendors from "@/pages/Vendors";
+import HsnMaster from "@/pages/HsnMaster";
+import CompanySettings from "@/pages/CompanySettings";
+import GstRegister from "@/pages/GstRegister";
 import Layout from "@/components/Layout";
 
 function Protected({ children }) {
@@ -43,6 +47,10 @@ function App() {
             <Route path="/expenses" element={<Protected><Expenses /></Protected>} />
             <Route path="/reports" element={<Protected><Reports /></Protected>} />
             <Route path="/customers" element={<Protected><Customers /></Protected>} />
+            <Route path="/vendors" element={<Protected><Vendors /></Protected>} />
+            <Route path="/hsn" element={<Protected><HsnMaster /></Protected>} />
+            <Route path="/settings" element={<Protected><CompanySettings /></Protected>} />
+            <Route path="/gst-register" element={<Protected><GstRegister /></Protected>} />
             <Route path="/reconciliation" element={<Protected><Reconciliation /></Protected>} />
             <Route path="/staff" element={<Protected><Staff /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />
