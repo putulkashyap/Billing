@@ -8,8 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Boxes, Plus, Trash2, Edit3, Search } from "lucide-react";
+import { Boxes, Plus, Trash2, Edit3, Search, Upload } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import HsnImportDialog from "@/components/HsnImportDialog";
 
 const RATES = [0, 0.1, 0.25, 3, 5, 12, 18, 28];
 const TAXABILITY = [
@@ -33,6 +34,7 @@ export default function HsnMaster() {
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = () => api.get("/hsn").then((r) => setList(r.data));
   useEffect(() => { load(); }, []);
@@ -80,9 +82,14 @@ export default function HsnMaster() {
           <p className="text-sm text-slate-500 mt-1">Configuration-driven GST rates. Add every HSN/SAC you invoice against.</p>
         </div>
         {isAdmin && (
-          <Button data-testid="add-hsn-btn" onClick={openNew} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
-            <Plus className="w-4 h-4" /> Add HSN / SAC
-          </Button>
+          <div className="flex gap-2">
+            <Button data-testid="import-hsn-btn" onClick={() => setImportOpen(true)} variant="outline" className="gap-2">
+              <Upload className="w-4 h-4" /> Import CSV
+            </Button>
+            <Button data-testid="add-hsn-btn" onClick={openNew} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+              <Plus className="w-4 h-4" /> Add HSN / SAC
+            </Button>
+          </div>
         )}
       </header>
 
@@ -212,6 +219,8 @@ export default function HsnMaster() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <HsnImportDialog open={importOpen} setOpen={setImportOpen} onImported={load} />
     </div>
   );
 }

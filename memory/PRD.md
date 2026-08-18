@@ -53,6 +53,16 @@ Build a full-stack, production-ready GST Billing & Account Reconciliation web ap
 - ✅ **Expenses form**: added optional vendor picker that auto-fills name+GSTIN from Vendor master.
 - ✅ Regression suite `/app/backend/tests/test_p2_masters_and_gst.py` (12 tests, all passing).
 
+## 2026-02 · P3 — HSN effective dates, Purchase Register & ITC, GST Summary, GSTR-1 Working
+- ✅ **HSN effective-date enforcement** in invoice create/update: rejects when invoice_date is outside HSN validity or when line rate mismatches configured master rate. HSN missing from master → user-driven rate allowed (backward compat for legacy invoices).
+- ✅ **HSN CSV bulk import**: `POST /api/hsn/import/preview` (multipart) + `POST /api/hsn/import/commit` with `skip / update / version` strategies. UI: `HsnImportDialog.jsx` on `/hsn` page with template download.
+- ✅ **Purchase Register expansion**: `Expense` + `ExpenseCreate` now carry `vendor_state`, `vendor_state_code`, `place_of_supply_state`, `place_of_supply_code`, `reverse_charge`, plus per-line `itc_eligibility` (eligible / ineligible / partial) with `itc_eligible_pct`. Purchase-side engine is `compute_expense_totals(vendor_gstin, items, pos_code, supplier_state_code, vendor_state_code)` — intra determined by *vendor_state* vs *pos* (not buyer state).
+- ✅ **ITC classification** — every line records eligible / ineligible / partial; bill roll-up produces `itc_eligible_amount` and `itc_ineligible_amount`.
+- ✅ **GST Purchase Register** page `/purchase-register` + `GET /api/reports/gst-purchase-register` (filters: FY, month, vendor, GSTIN, state, HSN, rate, ITC eligibility) + CSV export.
+- ✅ **GST Summary** page `/gst-summary` + `GET /api/reports/gst-summary` — Output CGST/SGST/IGST/Cess, Input CGST/SGST/IGST/Cess, Eligible/Ineligible ITC, Indicative Net GST Position with disclaimer.
+- ✅ **GSTR-1 Working Data Export** — `GET /api/reports/gstr1-working` (JSON + CSV) via `invoice_to_gstr1_row` mapping layer + `_gstr1_section` (B2B / B2CL / B2CS resolver). Response includes `missing_fields_for_portal_json` list clearly documenting what's still required before a portal-ready JSON can be emitted.
+- ✅ Regression suite `/app/backend/tests/test_p3_hsn_purchase_itc.py` (10 tests) + P2 suite (12 tests) — 22/22 pass.
+
 ## Verified Tests
 - Backend: 100% (9/9 pytest — auth, GJ CGST+SGST, MH IGST, partial/full payments, summary aggregates, staff create+login, RBAC 403)
 - Frontend: 100% (login → dashboard → new invoice with live totals ₹11,800 → save → preview with 3 templates → reconciliation payment)

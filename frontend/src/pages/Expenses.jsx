@@ -13,10 +13,11 @@ import { toast } from "sonner";
 import { Receipt, Plus, Trash2, Search, Paperclip, Eye, ExternalLink, CheckCircle2, XCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import FileUploader from "@/components/FileUploader";
+import { INDIAN_STATES, stateName, gstinStateCode } from "@/lib/india";
 
 const UNITS = ["Nos", "Pcs", "Kg", "Set", "Lot", "Month", "Hours", "Service"];
 const TAX_BRACKETS = [0, 5, 12, 18, 28];
-const emptyItem = () => ({ description: "", hsn: "", quantity: 1, unit: "Nos", rate: 0, tax_rate: 18, price_type: "exclusive" });
+const emptyItem = () => ({ description: "", hsn: "", quantity: 1, unit: "Nos", rate: 0, tax_rate: 18, price_type: "exclusive", itc_eligibility: "eligible", itc_eligible_pct: 100 });
 
 export default function Expenses() {
   const { isAdmin } = useAuth();
@@ -31,7 +32,10 @@ export default function Expenses() {
 
   function initialForm() {
     return {
-      vendor_name: "", vendor_gstin: "", bill_number: "", bill_date: todayISO(),
+      vendor_name: "", vendor_gstin: "", vendor_state: "", vendor_state_code: "",
+      place_of_supply_state: "", place_of_supply_code: "",
+      reverse_charge: false,
+      bill_number: "", bill_date: todayISO(),
       category: "Other", itc_eligible: true, notes: "",
       line_items: [emptyItem()],
       attachments: [],
@@ -48,17 +52,31 @@ export default function Expenses() {
   const pickVendor = (vid) => {
     const v = vendors.find((x) => x.id === vid);
     if (!v) return;
-    setForm((p) => ({ ...p, vendor_name: v.name, vendor_gstin: v.gstin || "" }));
+    const sc = v.state_code || gstinStateCode(v.gstin || "");
+    setForm((p) => ({
+      ...p,
+      vendor_name: v.name, vendor_gstin: v.gstin || "",
+      vendor_state: v.state || stateName(sc), vendor_state_code: sc,
+      place_of_supply_code: p.place_of_supply_code || sc,
+      place_of_supply_state: p.place_of_supply_state || v.state || stateName(sc),
+    }));
   };
+
+  const setPos = (v) => setForm((p) => ({ ...p, place_of_supply_code: v, place_of_supply_state: stateName(v) }));
 
   const openNew = () => { setEditing(null); setForm(initialForm()); setOpen(true); };
   const openEdit = (e) => {
     setEditing(e);
     setForm({
-      vendor_name: e.vendor_name, vendor_gstin: e.vendor_gstin || "", bill_number: e.bill_number,
+      vendor_name: e.vendor_name, vendor_gstin: e.vendor_gstin || "",
+      vendor_state: e.vendor_state || "", vendor_state_code: e.vendor_state_code || "",
+      place_of_supply_state: e.place_of_supply_state || "",
+      place_of_supply_code: e.place_of_supply_code || "",
+      reverse_charge: !!e.reverse_charge,
+      bill_number: e.bill_number,
       bill_date: e.bill_date, category: e.category || "Other", itc_eligible: e.itc_eligible !== false,
       notes: e.notes || "",
-      line_items: (e.line_items || []).map((it) => ({ price_type: "exclusive", ...it })),
+      line_items: (e.line_items || []).map((it) => ({ price_type: "exclusive", itc_eligibility: "eligible", itc_eligible_pct: 100, ...it })),
       attachments: e.attachments || [],
     });
     setOpen(true);
@@ -68,7 +86,11 @@ export default function Expenses() {
   const addItem = () => setForm((p) => ({ ...p, line_items: [...p.line_items, emptyItem()] }));
   const removeItem = (idx) => setForm((p) => ({ ...p, line_items: p.line_items.length > 1 ? p.line_items.filter((_, i) => i !== idx) : p.line_items }));
 
-  const preview = computeTotals({ gstin: form.vendor_gstin }, form.line_items);
+  const preview = computeTotals(
+    { state_code: form.place_of_supply_code, gstin: form.vendor_gstin },
+    form.line_items,
+    { supplierStateCode: "24" }
+  );
 
   const save = async () => {
     if (!form.vendor_name || !form.bill_number || !form.bill_date) return toast.error("Vendor, bill no. and date are required");
@@ -78,6 +100,8 @@ export default function Expenses() {
         ...form,
         line_items: form.line_items.map((it) => ({
           ...it, quantity: Number(it.quantity), rate: Number(it.rate), tax_rate: Number(it.tax_rate),
+          itc_eligibility: it.itc_eligibility || "eligible",
+          itc_eligible_pct: Number(it.itc_eligible_pct ?? 100),
         })),
       };
       if (editing) await api.put(`/expenses/${editing.id}`, payload);
@@ -231,7 +255,38 @@ export default function Expenses() {
               <div className="flex items-end gap-2">
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={form.itc_eligible} onChange={(e) => setForm({ ...form, itc_eligible: e.target.checked })} data-testid="exp-itc-eligible" />
-                  <span>ITC Eligible</span>
+                  <span>ITC Eligible (bill-level)</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <Label>Place of Supply</Label>
+                <Select value={form.place_of_supply_code} onValueChange={setPos}>
+                  <SelectTrigger data-testid="exp-pos"><SelectValue placeholder="Select state…" /></SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {INDIAN_STATES.map((s) => <SelectItem key={s.code} value={s.code}>{s.code} — {s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>PoS Code</Label>
+                <Input value={form.place_of_supply_code} readOnly className="bg-slate-50 font-mono" />
+              </div>
+              <div>
+                <Label>Vendor State</Label>
+                <Select value={form.vendor_state_code || ""} onValueChange={(v) => setForm({ ...form, vendor_state_code: v, vendor_state: stateName(v) })}>
+                  <SelectTrigger data-testid="exp-vendor-state"><SelectValue placeholder="Vendor origin" /></SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {INDIAN_STATES.map((s) => <SelectItem key={s.code} value={s.code}>{s.code} — {s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end gap-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={form.reverse_charge} onChange={(e) => setForm({ ...form, reverse_charge: e.target.checked })} data-testid="exp-reverse-charge" />
+                  <span>Reverse Charge (RCM)</span>
                 </label>
               </div>
             </div>
@@ -251,6 +306,8 @@ export default function Expenses() {
                     <th className="px-2 py-2 text-right w-24">Rate</th>
                     <th className="px-2 py-2 text-right w-16">Tax %</th>
                     <th className="px-2 py-2 text-left w-24">Type</th>
+                    <th className="px-2 py-2 text-left w-24">ITC</th>
+                    <th className="px-2 py-2 text-right w-14">%</th>
                     <th className="px-2 py-2 w-6"></th>
                   </tr>
                 </thead>
@@ -281,6 +338,23 @@ export default function Expenses() {
                             <SelectItem value="inclusive">Incl.</SelectItem>
                           </SelectContent>
                         </Select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Select value={it.itc_eligibility || "eligible"} onValueChange={(v) => updateItem(i, { itc_eligibility: v })}>
+                          <SelectTrigger data-testid={`exp-item-itc-${i}`}><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="eligible">Eligible</SelectItem>
+                            <SelectItem value="ineligible">Ineligible</SelectItem>
+                            <SelectItem value="partial">Partial</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input type="number" min="0" max="100" step="1" className="text-right font-mono"
+                               disabled={(it.itc_eligibility || "eligible") !== "partial"}
+                               value={it.itc_eligible_pct ?? 100}
+                               onChange={(e) => updateItem(i, { itc_eligible_pct: Number(e.target.value) })}
+                               data-testid={`exp-item-itc-pct-${i}`} />
                       </td>
                       <td className="px-2 py-1.5"><button onClick={() => removeItem(i)}><Trash2 className="w-4 h-4 text-slate-400" /></button></td>
                     </tr>

@@ -1,0 +1,5 @@
+Code,Description,GST Rate,Cess Rate,Taxability,ITC Eligible,Effective From,Effective To,Active
+998313,Information technology services,18,0,taxable,yes,2026-04-01,2027-03-31,yes
+3924,Household plastic articles,18,0,taxable,yes,2026-04-01,,yes
+0000,Bad rate row,999,0,taxable,yes,,,yes
+,Missing code row,18,0,taxable,yes,,,yes

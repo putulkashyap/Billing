@@ -19,6 +19,8 @@ import Vendors from "@/pages/Vendors";
 import HsnMaster from "@/pages/HsnMaster";
 import CompanySettings from "@/pages/CompanySettings";
 import GstRegister from "@/pages/GstRegister";
+import PurchaseRegister from "@/pages/PurchaseRegister";
+import GstSummary from "@/pages/GstSummary";
 import Layout from "@/components/Layout";
 
 function Protected({ children }) {
@@ -51,6 +53,8 @@ function App() {
             <Route path="/hsn" element={<Protected><HsnMaster /></Protected>} />
             <Route path="/settings" element={<Protected><CompanySettings /></Protected>} />
             <Route path="/gst-register" element={<Protected><GstRegister /></Protected>} />
+            <Route path="/purchase-register" element={<Protected><PurchaseRegister /></Protected>} />
+            <Route path="/gst-summary" element={<Protected><GstSummary /></Protected>} />
             <Route path="/reconciliation" element={<Protected><Reconciliation /></Protected>} />
             <Route path="/staff" element={<Protected><Staff /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />

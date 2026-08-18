@@ -800,8 +800,49 @@ async def get_invoice(iid: str, user=Depends(get_current_user)):
     return doc
 
 
+async def _validate_hsn_effective(items: List[LineItem], on_date: str) -> None:
+    """Enforce that each line's HSN/SAC rate is effective on the given invoice/bill date.
+       - If HSN is present in master: check effective_from/to and rate matches.
+       - If HSN is missing from master: skip (user-driven rate is acceptable)."""
+    if not items:
+        return
+    codes = list({(li.hsn or "").strip() for li in items if (li.hsn or "").strip()})
+    if not codes:
+        return
+    docs = await db.hsn_master.find({"code": {"$in": codes}}, {"_id": 0}).to_list(len(codes) * 4)
+    by_code: dict = {}
+    for d in docs:
+        by_code.setdefault(d["code"], []).append(d)
+    for li in items:
+        code = (li.hsn or "").strip()
+        if not code:
+            continue
+        rows = by_code.get(code, [])
+        if not rows:
+            continue  # not in master → skip enforcement
+        matching = [
+            r for r in rows
+            if r.get("active", True)
+            and (not r.get("effective_from") or r["effective_from"] <= on_date)
+            and (not r.get("effective_to") or r["effective_to"] >= on_date)
+        ]
+        if not matching:
+            raise HTTPException(
+                status_code=400,
+                detail=f"GST rate for HSN/SAC {code} is not valid for date {on_date}."
+            )
+        # Rate consistency (use the single active record for that date)
+        chosen = matching[0]
+        if abs(float(chosen.get("gst_rate", 0.0)) - float(li.tax_rate)) > 0.001:
+            raise HTTPException(
+                status_code=400,
+                detail=f"HSN/SAC {code} is configured at {chosen['gst_rate']}% for {on_date} but the line uses {li.tax_rate}%."
+            )
+
+
 @api.post("/invoices")
 async def create_invoice(inp: InvoiceCreate, user=Depends(get_current_user)):
+    await _validate_hsn_effective(inp.line_items, inp.invoice_date)
     company = await _load_company()
     supplier_state_code = company.get("state_code", "24")
     pos_code = inp.place_of_supply_code or (inp.customer.get("state_code") or gstin_state_code(inp.customer.get("gstin", "")))
@@ -868,6 +909,7 @@ async def update_invoice(iid: str, inp: InvoiceCreate, user=Depends(get_current_
         raise HTTPException(status_code=404, detail="Invoice not found")
     if inv.get("status") == "paid":
         raise HTTPException(status_code=400, detail="Paid invoices cannot be edited")
+    await _validate_hsn_effective(inp.line_items, inp.invoice_date)
     company = await _load_company()
     supplier_state_code = company.get("state_code", "24")
     pos_code = inp.place_of_supply_code or (inp.customer.get("state_code") or gstin_state_code(inp.customer.get("gstin", ""))) or inv.get("place_of_supply_code", "")
@@ -1030,6 +1072,8 @@ class ExpenseLine(BaseModel):
     rate: float
     tax_rate: float = 18.0
     price_type: Literal["exclusive", "inclusive"] = "exclusive"
+    itc_eligibility: Literal["eligible", "ineligible", "partial"] = "eligible"
+    itc_eligible_pct: float = 100.0  # only used when itc_eligibility == "partial"
 
 
 class Attachment(BaseModel):
@@ -1046,6 +1090,11 @@ class Expense(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     vendor_name: str
     vendor_gstin: Optional[str] = ""
+    vendor_state: Optional[str] = ""
+    vendor_state_code: Optional[str] = ""
+    place_of_supply_state: Optional[str] = ""
+    place_of_supply_code: Optional[str] = ""
+    reverse_charge: bool = False
     bill_number: str
     bill_date: str
     category: str = "Other"
@@ -1055,10 +1104,13 @@ class Expense(BaseModel):
     cgst: float = 0.0
     sgst: float = 0.0
     igst: float = 0.0
+    cess: float = 0.0
     total_tax: float = 0.0
     grand_total: float = 0.0
     is_intra_state: bool = True
-    itc_eligible: bool = True
+    itc_eligible: bool = True  # legacy bill-level flag, kept for backward compat
+    itc_eligible_amount: float = 0.0
+    itc_ineligible_amount: float = 0.0
     notes: Optional[str] = ""
     attachments: List[dict] = []
     status: Literal["pending", "partially_paid", "paid"] = "pending"
@@ -1070,8 +1122,14 @@ class Expense(BaseModel):
 
 
 class ExpenseCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     vendor_name: str
     vendor_gstin: Optional[str] = ""
+    vendor_state: Optional[str] = ""
+    vendor_state_code: Optional[str] = ""
+    place_of_supply_state: Optional[str] = ""
+    place_of_supply_code: Optional[str] = ""
+    reverse_charge: Optional[bool] = False
     bill_number: str
     bill_date: str
     category: str = "Other"
@@ -1081,11 +1139,22 @@ class ExpenseCreate(BaseModel):
     attachments: List[dict] = []
 
 
-def compute_expense_totals(vendor_gstin: str, items: List[ExpenseLine]) -> dict:
-    intra = is_gujarat_gstin(vendor_gstin or "")
+def compute_expense_totals(vendor_gstin: str, items: List[ExpenseLine],
+                            place_of_supply_code: str = "",
+                            supplier_state_code: str = "24",
+                            vendor_state_code: str = "") -> dict:
+    """Purchase-side GST engine.
+       For a PURCHASE the *supplier* is the vendor. Determination is
+       vendor_state_code vs place_of_supply_code (delivery location).
+       `supplier_state_code` param kept for signature compat but ignored here.
+       Falls back to vendor GSTIN prefix for legacy data."""
+    vendor_sc = (vendor_state_code or "").strip() or gstin_state_code(vendor_gstin or "")
+    pos = (place_of_supply_code or "").strip() or vendor_sc
+    intra = bool(vendor_sc) and bool(pos) and vendor_sc == pos
     subtotal = 0.0
     taxable = 0.0
     cgst = sgst = igst = 0.0
+    itc_eligible_amt = itc_ineligible_amt = 0.0
     for it in items:
         gross = it.quantity * it.rate
         subtotal += gross
@@ -1101,6 +1170,15 @@ def compute_expense_totals(vendor_gstin: str, items: List[ExpenseLine]) -> dict:
             sgst += tax_amt / 2
         else:
             igst += tax_amt
+        # ITC classification (per-line)
+        if it.itc_eligibility == "eligible":
+            itc_eligible_amt += tax_amt
+        elif it.itc_eligibility == "ineligible":
+            itc_ineligible_amt += tax_amt
+        else:  # partial
+            pct = max(0.0, min(100.0, float(it.itc_eligible_pct or 0.0)))
+            itc_eligible_amt += tax_amt * pct / 100.0
+            itc_ineligible_amt += tax_amt * (1 - pct / 100.0)
     total_tax = cgst + sgst + igst
     r = lambda x: round(x, 2)
     return {
@@ -1109,9 +1187,12 @@ def compute_expense_totals(vendor_gstin: str, items: List[ExpenseLine]) -> dict:
         "cgst": r(cgst),
         "sgst": r(sgst),
         "igst": r(igst),
+        "cess": 0.0,
         "total_tax": r(total_tax),
         "grand_total": r(taxable + total_tax),
         "is_intra_state": intra,
+        "itc_eligible_amount": r(itc_eligible_amt),
+        "itc_ineligible_amount": r(itc_ineligible_amt),
     }
 
 
@@ -1128,10 +1209,24 @@ async def list_categories(user=Depends(get_current_user)):
 
 @api.post("/expenses")
 async def create_expense(inp: ExpenseCreate, user=Depends(get_current_user)):
-    totals = compute_expense_totals(inp.vendor_gstin or "", inp.line_items)
+    company = await _load_company()
+    supplier_state_code = company.get("state_code", "24")
+    pos_code = inp.place_of_supply_code or inp.vendor_state_code or supplier_state_code
+    pos_state = inp.place_of_supply_state or inp.vendor_state or ""
+    totals = compute_expense_totals(
+        inp.vendor_gstin or "", inp.line_items,
+        place_of_supply_code=pos_code,
+        supplier_state_code=supplier_state_code,
+        vendor_state_code=inp.vendor_state_code or "",
+    )
     doc = Expense(
         vendor_name=inp.vendor_name,
-        vendor_gstin=inp.vendor_gstin or "",
+        vendor_gstin=(inp.vendor_gstin or "").upper(),
+        vendor_state=inp.vendor_state or "",
+        vendor_state_code=inp.vendor_state_code or "",
+        place_of_supply_state=pos_state,
+        place_of_supply_code=pos_code,
+        reverse_charge=bool(inp.reverse_charge),
         bill_number=inp.bill_number,
         bill_date=inp.bill_date,
         category=inp.category,
@@ -1155,13 +1250,27 @@ async def update_expense(eid: str, inp: ExpenseCreate, user=Depends(get_current_
         raise HTTPException(status_code=404, detail="Expense not found")
     if exp.get("status") == "paid":
         raise HTTPException(status_code=400, detail="Paid expenses cannot be edited")
-    totals = compute_expense_totals(inp.vendor_gstin or "", inp.line_items)
+    company = await _load_company()
+    supplier_state_code = company.get("state_code", "24")
+    pos_code = inp.place_of_supply_code or inp.vendor_state_code or exp.get("place_of_supply_code", "") or supplier_state_code
+    pos_state = inp.place_of_supply_state or inp.vendor_state or exp.get("place_of_supply_state", "")
+    totals = compute_expense_totals(
+        inp.vendor_gstin or "", inp.line_items,
+        place_of_supply_code=pos_code,
+        supplier_state_code=supplier_state_code,
+        vendor_state_code=inp.vendor_state_code or "",
+    )
     amount_paid = float(exp.get("amount_paid", 0.0))
     balance = round(totals["grand_total"] - amount_paid, 2)
     status_str = "paid" if balance <= 0.001 else ("partially_paid" if amount_paid > 0 else "pending")
     upd = {
         "vendor_name": inp.vendor_name,
-        "vendor_gstin": inp.vendor_gstin or "",
+        "vendor_gstin": (inp.vendor_gstin or "").upper(),
+        "vendor_state": inp.vendor_state or "",
+        "vendor_state_code": inp.vendor_state_code or "",
+        "place_of_supply_state": pos_state,
+        "place_of_supply_code": pos_code,
+        "reverse_charge": bool(inp.reverse_charge),
         "bill_number": inp.bill_number,
         "bill_date": inp.bill_date,
         "category": inp.category,
@@ -1424,6 +1533,380 @@ def _line_taxable(li: dict) -> float:
     if (li.get("price_type", "exclusive")) == "inclusive":
         return round(billed / (1 + tax_rate / 100.0), 2) if tax_rate else round(billed, 2)
     return round(billed, 2)
+
+
+# ---------- HSN CSV Bulk Import ----------
+class HsnImportRow(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    code: str
+    description: Optional[str] = ""
+    gst_rate: float = 18.0
+    cess_rate: float = 0.0
+    taxability: Optional[str] = "taxable"
+    itc_eligible: Optional[bool] = True
+    effective_from: Optional[str] = ""
+    effective_to: Optional[str] = ""
+    active: Optional[bool] = True
+
+
+class HsnImportCommit(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    rows: List[HsnImportRow]
+    strategy: Literal["skip", "update", "version"] = "skip"
+
+
+def _parse_hsn_csv(raw: str) -> tuple[List[dict], List[dict]]:
+    """Return (parsed_rows, errors). Header names are normalised (case- and space-insensitive)."""
+    import csv, io
+    reader = csv.DictReader(io.StringIO(raw))
+    normalize = lambda k: (k or "").strip().lower().replace(" ", "_").replace("/", "_")
+    parsed: List[dict] = []
+    errors: List[dict] = []
+    for i, raw_row in enumerate(reader, start=2):  # header is row 1
+        row = {normalize(k): (v or "").strip() for k, v in raw_row.items()}
+        code = row.get("code") or row.get("hsn_sac") or row.get("hsn") or row.get("sac") or ""
+        if not code:
+            errors.append({"line": i, "error": "Missing HSN/SAC code"})
+            continue
+        line_errors: List[str] = []
+        try:
+            gst_rate = float(row.get("gst_rate") or row.get("rate") or 0)
+        except ValueError:
+            gst_rate = 0.0
+            line_errors.append("gst_rate is not numeric")
+        if gst_rate < 0 or gst_rate > 40:
+            line_errors.append(f"gst_rate {gst_rate}% is out of range")
+        try:
+            cess_rate = float(row.get("cess_rate") or 0)
+        except ValueError:
+            cess_rate = 0.0
+            line_errors.append("cess_rate is not numeric")
+        ef = row.get("effective_from") or ""
+        et = row.get("effective_to") or ""
+        if ef and et and ef > et:
+            line_errors.append("effective_from > effective_to")
+        rec = {
+            "code": code.strip(),
+            "description": row.get("description") or "",
+            "gst_rate": gst_rate,
+            "cess_rate": cess_rate,
+            "taxability": (row.get("taxability") or "taxable").lower(),
+            "itc_eligible": (row.get("itc_eligible") or "yes").lower() not in ("no", "false", "0"),
+            "effective_from": ef,
+            "effective_to": et,
+            "active": (row.get("active") or "yes").lower() not in ("no", "false", "0"),
+        }
+        if line_errors:
+            errors.append({"line": i, "code": code, "error": "; ".join(line_errors)})
+            continue
+        parsed.append(rec)
+    return parsed, errors
+
+
+@api.post("/hsn/import/preview")
+async def hsn_import_preview(file: UploadFile = File(...), user=Depends(require_admin)):
+    raw = (await file.read()).decode("utf-8", errors="replace")
+    parsed, errors = _parse_hsn_csv(raw)
+    codes = list({r["code"] for r in parsed})
+    existing = await db.hsn_master.find({"code": {"$in": codes}}, {"_id": 0}).to_list(len(codes) * 4) if codes else []
+    exist_map: dict = {}
+    for e in existing:
+        exist_map.setdefault(e["code"], []).append(e)
+    result_rows = []
+    for r in parsed:
+        conflicts = exist_map.get(r["code"], [])
+        overlap = False
+        for c in conflicts:
+            cf, ct = c.get("effective_from") or "", c.get("effective_to") or "9999-12-31"
+            rf, rt = r["effective_from"] or "", r["effective_to"] or "9999-12-31"
+            # naive overlap: if any dates missing treat as open-ended
+            if (rf or "0000-01-01") <= (ct or "9999-12-31") and (rt or "9999-12-31") >= (cf or "0000-01-01"):
+                overlap = True
+                break
+        result_rows.append({**r, "exists": bool(conflicts), "overlap": overlap})
+    return {"rows": result_rows, "errors": errors, "count": len(result_rows), "conflict_count": sum(1 for x in result_rows if x["exists"])}
+
+
+@api.post("/hsn/import/commit")
+async def hsn_import_commit(payload: HsnImportCommit, user=Depends(require_admin)):
+    inserted = updated = skipped = 0
+    for r in payload.rows:
+        rate = float(r.gst_rate or 0.0)
+        half = round(rate / 2.0, 4)
+        rec = {
+            "code": r.code.strip(),
+            "description": r.description or "",
+            "gst_rate": rate,
+            "cgst_rate": half,
+            "sgst_rate": half,
+            "igst_rate": rate,
+            "cess_rate": float(r.cess_rate or 0.0),
+            "taxability": (r.taxability or "taxable"),
+            "itc_eligible": bool(r.itc_eligible),
+            "effective_from": r.effective_from or "",
+            "effective_to": r.effective_to or "",
+            "active": bool(r.active) if r.active is not None else True,
+            "updated_at": now_iso(),
+        }
+        existing = await db.hsn_master.find_one({"code": rec["code"]}, {"_id": 0})
+        if existing:
+            if payload.strategy == "skip":
+                skipped += 1
+                continue
+            if payload.strategy == "update":
+                await db.hsn_master.update_one({"code": rec["code"]}, {"$set": rec})
+                updated += 1
+                continue
+            if payload.strategy == "version":
+                # deactivate current, insert new versioned record
+                await db.hsn_master.update_one({"code": rec["code"], "active": True}, {"$set": {"active": False}})
+                # Note: because "code" has a unique index, we can't insert same code again.
+                # Version strategy is therefore only useful when the old row's code is renamed.
+                # For safety, fall back to update if we hit the unique index.
+                try:
+                    doc = HsnMaster(**rec).model_dump()
+                    await db.hsn_master.insert_one(doc)
+                    inserted += 1
+                except Exception:
+                    await db.hsn_master.update_one({"code": rec["code"]}, {"$set": rec})
+                    updated += 1
+                continue
+        else:
+            doc = HsnMaster(**rec).model_dump()
+            await db.hsn_master.insert_one(doc)
+            inserted += 1
+    return {"inserted": inserted, "updated": updated, "skipped": skipped}
+
+
+# ---------- GST Purchase Register / ITC Working ----------
+def _expense_line_taxable(li: dict) -> float:
+    qty = float(li.get("quantity", 0) or 0)
+    rate = float(li.get("rate", 0) or 0)
+    gross = qty * rate
+    tax_rate = float(li.get("tax_rate", 0) or 0)
+    if (li.get("price_type", "exclusive")) == "inclusive":
+        return round(gross / (1 + tax_rate / 100.0), 2) if tax_rate else round(gross, 2)
+    return round(gross, 2)
+
+
+@api.get("/reports/gst-purchase-register")
+async def gst_purchase_register(from_date: Optional[str] = None, to_date: Optional[str] = None,
+                                vendor: Optional[str] = None, gstin: Optional[str] = None,
+                                state: Optional[str] = None, hsn: Optional[str] = None,
+                                gst_rate: Optional[float] = None,
+                                itc_eligibility: Optional[str] = None,
+                                fmt: Optional[str] = "json", user=Depends(get_current_user)):
+    q: dict = {}
+    if from_date:
+        q.setdefault("bill_date", {})["$gte"] = from_date
+    if to_date:
+        q.setdefault("bill_date", {})["$lte"] = to_date
+    if vendor:
+        q["vendor_name"] = {"$regex": vendor, "$options": "i"}
+    if gstin:
+        q["vendor_gstin"] = {"$regex": gstin, "$options": "i"}
+    if state:
+        q["$or"] = [
+            {"place_of_supply_state": {"$regex": state, "$options": "i"}},
+            {"vendor_state": {"$regex": state, "$options": "i"}},
+        ]
+    docs = await db.expenses.find(q, {"_id": 0}).sort("bill_date", 1).to_list(10000)
+    rows = []
+    for d in docs:
+        items = d.get("line_items") or [{}]
+        total_taxable = sum(_expense_line_taxable(li) for li in items) or 1.0
+        for li in items:
+            line_tax = _expense_line_taxable(li)
+            weight = line_tax / total_taxable if total_taxable else 0
+            cgst = round(d.get("cgst", 0) * weight, 2)
+            sgst = round(d.get("sgst", 0) * weight, 2)
+            igst = round(d.get("igst", 0) * weight, 2)
+            tax_amt = cgst + sgst + igst
+            itc_kind = li.get("itc_eligibility", "eligible" if d.get("itc_eligible", True) else "ineligible")
+            pct = float(li.get("itc_eligible_pct", 100.0))
+            if itc_kind == "eligible":
+                itc_e = tax_amt; itc_i = 0.0
+            elif itc_kind == "ineligible":
+                itc_e = 0.0; itc_i = tax_amt
+            else:
+                itc_e = tax_amt * pct / 100.0; itc_i = tax_amt - itc_e
+            row = {
+                "bill_number": d.get("bill_number"),
+                "bill_date": d.get("bill_date"),
+                "vendor": d.get("vendor_name", ""),
+                "vendor_gstin": d.get("vendor_gstin", ""),
+                "place_of_supply_state": d.get("place_of_supply_state") or d.get("vendor_state") or "",
+                "place_of_supply_code": d.get("place_of_supply_code") or d.get("vendor_state_code") or "",
+                "hsn": li.get("hsn", ""),
+                "description": li.get("description", ""),
+                "taxable_value": round(line_tax, 2),
+                "gst_rate": li.get("tax_rate", 0),
+                "cgst": cgst,
+                "sgst": sgst,
+                "igst": igst,
+                "cess": 0.0,
+                "itc_eligibility": itc_kind,
+                "itc_eligible": round(itc_e, 2),
+                "itc_ineligible": round(itc_i, 2),
+                "reverse_charge": bool(d.get("reverse_charge", False)),
+                "total": round(line_tax + tax_amt, 2),
+                "status": d.get("status", ""),
+            }
+            if gst_rate is not None and float(row["gst_rate"]) != float(gst_rate):
+                continue
+            if hsn and hsn.strip() and row["hsn"] != hsn.strip():
+                continue
+            if itc_eligibility and itc_eligibility != row["itc_eligibility"]:
+                continue
+            rows.append(row)
+    if (fmt or "").lower() == "csv":
+        import io, csv
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()) if rows else [
+            "bill_number", "bill_date", "vendor", "vendor_gstin",
+            "place_of_supply_state", "place_of_supply_code", "hsn", "description",
+            "taxable_value", "gst_rate", "cgst", "sgst", "igst", "cess",
+            "itc_eligibility", "itc_eligible", "itc_ineligible", "reverse_charge",
+            "total", "status"])
+        w.writeheader()
+        for r in rows:
+            w.writerow(r)
+        from fastapi.responses import Response
+        return Response(content=buf.getvalue(), media_type="text/csv",
+                        headers={"Content-Disposition": "attachment; filename=gst_purchase_register.csv"})
+    return {"rows": rows, "count": len(rows)}
+
+
+# ---------- GST Summary ----------
+@api.get("/reports/gst-summary")
+async def gst_summary(from_date: Optional[str] = None, to_date: Optional[str] = None,
+                      user=Depends(get_current_user)):
+    inv_q: dict = {}
+    exp_q: dict = {}
+    if from_date:
+        inv_q.setdefault("invoice_date", {})["$gte"] = from_date
+        exp_q.setdefault("bill_date", {})["$gte"] = from_date
+    if to_date:
+        inv_q.setdefault("invoice_date", {})["$lte"] = to_date
+        exp_q.setdefault("bill_date", {})["$lte"] = to_date
+    invoices = await db.invoices.find(inv_q, {"_id": 0}).to_list(20000)
+    expenses = await db.expenses.find(exp_q, {"_id": 0}).to_list(20000)
+    credit_notes = await db.credit_notes.find(inv_q, {"_id": 0}).to_list(20000)
+
+    def sum_field(items, key):
+        return round(sum(float(i.get(key, 0) or 0) for i in items), 2)
+
+    output_cgst = sum_field(invoices, "cgst") - sum_field(credit_notes, "cgst")
+    output_sgst = sum_field(invoices, "sgst") - sum_field(credit_notes, "sgst")
+    output_igst = sum_field(invoices, "igst") - sum_field(credit_notes, "igst")
+    output_cess = 0.0
+    input_cgst = sum_field(expenses, "cgst")
+    input_sgst = sum_field(expenses, "sgst")
+    input_igst = sum_field(expenses, "igst")
+    input_cess = sum_field(expenses, "cess")
+    itc_eligible = sum_field(expenses, "itc_eligible_amount")
+    itc_ineligible = sum_field(expenses, "itc_ineligible_amount")
+    output_gst = output_cgst + output_sgst + output_igst + output_cess
+    input_gst = input_cgst + input_sgst + input_igst + input_cess
+    net_position = round(output_gst - itc_eligible, 2)
+    return {
+        "from_date": from_date or "",
+        "to_date": to_date or "",
+        "invoice_count": len(invoices),
+        "credit_note_count": len(credit_notes),
+        "expense_count": len(expenses),
+        "output": {
+            "cgst": round(output_cgst, 2), "sgst": round(output_sgst, 2),
+            "igst": round(output_igst, 2), "cess": round(output_cess, 2),
+            "total": round(output_gst, 2),
+        },
+        "input": {
+            "cgst": round(input_cgst, 2), "sgst": round(input_sgst, 2),
+            "igst": round(input_igst, 2), "cess": round(input_cess, 2),
+            "total": round(input_gst, 2),
+        },
+        "itc": {"eligible": itc_eligible, "ineligible": itc_ineligible},
+        "position": {
+            "gross_output_gst": round(output_gst, 2),
+            "less_eligible_itc": itc_eligible,
+            "indicative_net_gst": net_position,
+        },
+        "disclaimer": "Management/working calculation. Not an automatic tax filing/payment instruction.",
+    }
+
+
+# ---------- GSTR-1 Mapping (working export) ----------
+def _gstr1_section(inv: dict) -> str:
+    """Rudimentary section resolver following GST portal conventions."""
+    cust = inv.get("customer") or {}
+    gstin = (cust.get("gstin") or "").strip()
+    intra = bool(inv.get("cgst") or inv.get("sgst")) and not inv.get("igst")
+    grand = float(inv.get("grand_total") or 0)
+    if gstin and len(gstin) >= 15:
+        return "B2B"
+    # unregistered inter-state large invoice
+    if not intra and grand > 250000:
+        return "B2CL"
+    return "B2CS"
+
+
+def invoice_to_gstr1_row(inv: dict) -> dict:
+    cust = inv.get("customer") or {}
+    return {
+        "section": _gstr1_section(inv),
+        "invoice_number": inv.get("invoice_number"),
+        "invoice_date": inv.get("invoice_date"),
+        "invoice_value": float(inv.get("grand_total") or 0),
+        "place_of_supply": inv.get("place_of_supply_code") or cust.get("state_code") or "",
+        "reverse_charge": "N",
+        "invoice_type": "Regular",
+        "customer_gstin": cust.get("gstin") or "",
+        "customer_name": cust.get("name") or "",
+        "taxable_value": float(inv.get("taxable_amount") or 0),
+        "cgst_rate": None, "sgst_rate": None, "igst_rate": None,
+        "cgst_amount": float(inv.get("cgst") or 0),
+        "sgst_amount": float(inv.get("sgst") or 0),
+        "igst_amount": float(inv.get("igst") or 0),
+        "cess_amount": 0.0,
+    }
+
+
+@api.get("/reports/gstr1-working")
+async def gstr1_working(from_date: Optional[str] = None, to_date: Optional[str] = None,
+                        fmt: Optional[str] = "json", user=Depends(get_current_user)):
+    q: dict = {}
+    if from_date:
+        q.setdefault("invoice_date", {})["$gte"] = from_date
+    if to_date:
+        q.setdefault("invoice_date", {})["$lte"] = to_date
+    docs = await db.invoices.find(q, {"_id": 0}).sort("invoice_date", 1).to_list(20000)
+    rows = [invoice_to_gstr1_row(d) for d in docs]
+    # Known missing fields for a strict GST portal JSON — reported so caller knows this is *working* only.
+    missing_fields = [
+        "b2cs_rate_bucket_aggregation",  # B2CS section requires state+rate bucketed rows, not raw invoices
+        "shipping_bill_details_for_exports",
+        "reverse_charge_capture_at_invoice_level",
+        "e_invoice_irn_and_ack_no",
+        "e_way_bill_reference_number",
+        "line_item_level_hsn_summary_(gstr1_table_12)",
+        "document_series_summary_(gstr1_table_13)",
+    ]
+    if (fmt or "").lower() == "csv":
+        import io, csv
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()) if rows else [])
+        w.writeheader()
+        for r in rows:
+            w.writerow(r)
+        from fastapi.responses import Response
+        return Response(content=buf.getvalue(), media_type="text/csv",
+                        headers={"Content-Disposition": "attachment; filename=gstr1_working_data.csv"})
+    return {
+        "rows": rows,
+        "count": len(rows),
+        "disclaimer": "GSTR-1 Working Data Export — NOT a portal-ready filing JSON.",
+        "missing_fields_for_portal_json": missing_fields,
+    }
 
 
 @api.get("/reports/pnl")
