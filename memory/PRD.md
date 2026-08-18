@@ -36,6 +36,9 @@ Build a full-stack, production-ready GST Billing & Account Reconciliation web ap
 - ✅ Branded SVG logo embedded in app header and PDF letterheads
 - ✅ RBAC (staff blocked from /api/users and customer delete — returns 403)
 
+## 2026-02 · Data Maintenance
+- ✅ DB cleanup verified: 1 invoice kept (`TE/2026-27/0001`, ₹44,200, IGST ₹6,742.37), 0 credit notes, counter `invoice_2026-27.seq=1` → next invoice `TE/2026-27/0002`. No code/UI/master data changes.
+
 ## Verified Tests
 - Backend: 100% (9/9 pytest — auth, GJ CGST+SGST, MH IGST, partial/full payments, summary aggregates, staff create+login, RBAC 403)
 - Frontend: 100% (login → dashboard → new invoice with live totals ₹11,800 → save → preview with 3 templates → reconciliation payment)
