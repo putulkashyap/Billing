@@ -63,6 +63,15 @@ Build a full-stack, production-ready GST Billing & Account Reconciliation web ap
 - ✅ **GSTR-1 Working Data Export** — `GET /api/reports/gstr1-working` (JSON + CSV) via `invoice_to_gstr1_row` mapping layer + `_gstr1_section` (B2B / B2CL / B2CS resolver). Response includes `missing_fields_for_portal_json` list clearly documenting what's still required before a portal-ready JSON can be emitted.
 - ✅ Regression suite `/app/backend/tests/test_p3_hsn_purchase_itc.py` (10 tests) + P2 suite (12 tests) — 22/22 pass.
 
+## 2026-02 · P4 — GSTR-1 Portal JSON generator
+- ✅ **Schema researched (current 2025 offline utility)**: Table 12 rate-wise HSN with B2B/B2C tabs, Table 13 mandatory from May 2025 onwards, B2CS aggregated by (sply_ty, pos, rt), B2CL threshold ₹2.5L for inter-state unregistered, field names per gstr1_3b (`ctin`, `inum`, `idt`, `val`, `pos`, `rchrg`, `inv_typ`, `itms[]` with `itm_det{txval, rt, iamt, camt, samt, csamt}`, HSN `data[]` with `num/hsn_sc/uqc/qty/txval/iamt/camt/samt/csamt`).
+- ✅ **Dedicated module** `/app/backend/gstr1.py` — isolated from invoice calc engine. `generate_gstr1_json()`, `validate_gstr1_data()`, section builders `_build_b2b/_b2cl/_b2cs/_exp/_hsn/_doc_issue`, `VALIDATIONS_IMPLEMENTED` (12) and `VALIDATIONS_NOT_IMPLEMENTED` (7) constants.
+- ✅ **Invoice model P4 fields**: `rcm`, `export_type`, `shipping_bill_number/date`, `port_code`, `irn`, `irn_ack_no/date`, `eway_bill_number/date`, `cancelled`. UI: collapsible Compliance section in InvoiceForm.
+- ✅ **Endpoint** `GET /api/reports/gstr1-portal-json?fp=MMYYYY&dryrun=true|false`. Dryrun returns PASS/BLOCKED + counts + validation lists. On failure returns 400 with an errors array pinpointing invoice + field + reason (e.g. *"B2B · TE/2026-27/0001 · [pos] Place of Supply missing."*).
+- ✅ **UI page** `/gstr1-portal` (`Gstr1Portal.jsx`) — Validate button + Generate & Download. Displays both PASS/BLOCKED banner and both validations-we-run and validations-we-do-NOT-run lists side by side for full transparency.
+- ✅ **Working Data Export kept intact** — CSV via `/reports/gstr1-working` and GST Summary page unchanged.
+- ✅ Regression suite `/app/backend/tests/test_p4_gstr1_json.py` (17 tests) — total 39/39 pass across P2+P3+P4.
+
 ## Verified Tests
 - Backend: 100% (9/9 pytest — auth, GJ CGST+SGST, MH IGST, partial/full payments, summary aggregates, staff create+login, RBAC 403)
 - Frontend: 100% (login → dashboard → new invoice with live totals ₹11,800 → save → preview with 3 templates → reconciliation payment)

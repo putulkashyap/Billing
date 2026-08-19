@@ -21,6 +21,7 @@ import CompanySettings from "@/pages/CompanySettings";
 import GstRegister from "@/pages/GstRegister";
 import PurchaseRegister from "@/pages/PurchaseRegister";
 import GstSummary from "@/pages/GstSummary";
+import Gstr1Portal from "@/pages/Gstr1Portal";
 import Layout from "@/components/Layout";
 
 function Protected({ children }) {
@@ -55,6 +56,7 @@ function App() {
             <Route path="/gst-register" element={<Protected><GstRegister /></Protected>} />
             <Route path="/purchase-register" element={<Protected><PurchaseRegister /></Protected>} />
             <Route path="/gst-summary" element={<Protected><GstSummary /></Protected>} />
+            <Route path="/gstr1-portal" element={<Protected><Gstr1Portal /></Protected>} />
             <Route path="/reconciliation" element={<Protected><Reconciliation /></Protected>} />
             <Route path="/staff" element={<Protected><Staff /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />

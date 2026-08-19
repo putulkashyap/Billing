@@ -298,6 +298,18 @@ class Invoice(BaseModel):
     line_items: List[dict]
     place_of_supply_state: Optional[str] = ""
     place_of_supply_code: Optional[str] = ""
+    # --- GSTR-1 optional/compliance fields (P4) ---
+    rcm: Optional[bool] = False
+    export_type: Optional[str] = ""
+    shipping_bill_number: Optional[str] = ""
+    shipping_bill_date: Optional[str] = ""
+    port_code: Optional[str] = ""
+    irn: Optional[str] = ""
+    irn_ack_no: Optional[str] = ""
+    irn_ack_date: Optional[str] = ""
+    eway_bill_number: Optional[str] = ""
+    eway_bill_date: Optional[str] = ""
+    cancelled: bool = False
     subtotal: float
     total_discount: float
     taxable_amount: float
@@ -331,6 +343,17 @@ class InvoiceCreate(BaseModel):
     place_of_supply_state: Optional[str] = ""
     place_of_supply_code: Optional[str] = ""
     notes: Optional[str] = ""
+    # --- GSTR-1 optional/compliance fields (P4) ---
+    rcm: Optional[bool] = False
+    export_type: Optional[str] = ""  # "" | "WPAY" | "WOPAY"
+    shipping_bill_number: Optional[str] = ""
+    shipping_bill_date: Optional[str] = ""
+    port_code: Optional[str] = ""
+    irn: Optional[str] = ""
+    irn_ack_no: Optional[str] = ""
+    irn_ack_date: Optional[str] = ""
+    eway_bill_number: Optional[str] = ""
+    eway_bill_date: Optional[str] = ""
 
 
 class PaymentCreate(BaseModel):
@@ -863,6 +886,16 @@ async def create_invoice(inp: InvoiceCreate, user=Depends(get_current_user)):
         line_items=[li.model_dump() for li in inp.line_items],
         place_of_supply_state=pos_state,
         place_of_supply_code=pos_code,
+        rcm=bool(inp.rcm),
+        export_type=inp.export_type or "",
+        shipping_bill_number=inp.shipping_bill_number or "",
+        shipping_bill_date=inp.shipping_bill_date or "",
+        port_code=inp.port_code or "",
+        irn=inp.irn or "",
+        irn_ack_no=inp.irn_ack_no or "",
+        irn_ack_date=inp.irn_ack_date or "",
+        eway_bill_number=inp.eway_bill_number or "",
+        eway_bill_date=inp.eway_bill_date or "",
         notes=inp.notes or "",
         created_by=user["id"],
         balance=totals["grand_total"],
@@ -938,6 +971,16 @@ async def update_invoice(iid: str, inp: InvoiceCreate, user=Depends(get_current_
         "line_items": [li.model_dump() for li in inp.line_items],
         "place_of_supply_state": pos_state,
         "place_of_supply_code": pos_code,
+        "rcm": bool(inp.rcm),
+        "export_type": inp.export_type or "",
+        "shipping_bill_number": inp.shipping_bill_number or "",
+        "shipping_bill_date": inp.shipping_bill_date or "",
+        "port_code": inp.port_code or "",
+        "irn": inp.irn or "",
+        "irn_ack_no": inp.irn_ack_no or "",
+        "irn_ack_date": inp.irn_ack_date or "",
+        "eway_bill_number": inp.eway_bill_number or "",
+        "eway_bill_date": inp.eway_bill_date or "",
         "notes": inp.notes or "",
         "balance": balance,
         "status": status_str,
@@ -1907,6 +1950,45 @@ async def gstr1_working(from_date: Optional[str] = None, to_date: Optional[str] 
         "disclaimer": "GSTR-1 Working Data Export — NOT a portal-ready filing JSON.",
         "missing_fields_for_portal_json": missing_fields,
     }
+
+
+@api.get("/reports/gstr1-portal-json")
+async def gstr1_portal_json(fp: str, dryrun: bool = False, user=Depends(get_current_user)):
+    """Generate GSTR-1 portal JSON for filing period MMYYYY.
+       If dryrun=true, only return validation status (no JSON body).
+       On validation failure returns 400 with `errors` array — no partial JSON is emitted."""
+    from gstr1 import (generate_gstr1_json, validate_gstr1_data,
+                       VALIDATIONS_IMPLEMENTED, VALIDATIONS_NOT_IMPLEMENTED)
+    if not fp or len(fp) != 6 or not fp.isdigit():
+        raise HTTPException(status_code=400, detail="fp must be MMYYYY (6 digits)")
+    mm, yyyy = fp[:2], fp[2:]
+    start = f"{yyyy}-{mm}-01"
+    from calendar import monthrange
+    end_day = monthrange(int(yyyy), int(mm))[1]
+    end = f"{yyyy}-{mm}-{end_day:02d}"
+    invoices = await db.invoices.find({"invoice_date": {"$gte": start, "$lte": end}}, {"_id": 0}).to_list(20000)
+    credit_notes = await db.credit_notes.find({"credit_date": {"$gte": start, "$lte": end}}, {"_id": 0}).to_list(20000)
+    company = await _load_company()
+    errors = validate_gstr1_data(invoices, company, fp)
+    if errors:
+        raise HTTPException(status_code=400, detail={
+            "status": "BLOCKED",
+            "message": "Cannot generate portal JSON because required information is missing.",
+            "errors": errors,
+            "validations_implemented": VALIDATIONS_IMPLEMENTED,
+            "validations_not_implemented": VALIDATIONS_NOT_IMPLEMENTED,
+        })
+    if dryrun:
+        return {
+            "status": "PASS",
+            "message": "Ready for GSTR-1 JSON generation.",
+            "invoice_count": len(invoices),
+            "credit_note_count": len(credit_notes),
+            "validations_implemented": VALIDATIONS_IMPLEMENTED,
+            "validations_not_implemented": VALIDATIONS_NOT_IMPLEMENTED,
+        }
+    payload = generate_gstr1_json(invoices, credit_notes, company, fp)
+    return payload
 
 
 @api.get("/reports/pnl")

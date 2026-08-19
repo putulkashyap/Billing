@@ -34,6 +34,13 @@ export default function InvoiceForm() {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [compliance, setCompliance] = useState({
+    rcm: false, export_type: "",
+    shipping_bill_number: "", shipping_bill_date: "", port_code: "",
+    irn: "", irn_ack_no: "", irn_ack_date: "",
+    eway_bill_number: "", eway_bill_date: "",
+  });
+  const [showCompliance, setShowCompliance] = useState(false);
 
   useEffect(() => {
     api.get("/customers").then((r) => setCustomers(r.data)).catch(() => {});
@@ -67,6 +74,15 @@ export default function InvoiceForm() {
       });
       setReg({ po_number: inv.po_number || "", reference_date: inv.reference_date || "" });
       setNotes(inv.notes || "");
+      setCompliance({
+        rcm: !!inv.rcm, export_type: inv.export_type || "",
+        shipping_bill_number: inv.shipping_bill_number || "",
+        shipping_bill_date: inv.shipping_bill_date || "",
+        port_code: inv.port_code || "",
+        irn: inv.irn || "", irn_ack_no: inv.irn_ack_no || "", irn_ack_date: inv.irn_ack_date || "",
+        eway_bill_number: inv.eway_bill_number || "", eway_bill_date: inv.eway_bill_date || "",
+      });
+      if (inv.rcm || inv.export_type || inv.irn || inv.eway_bill_number) setShowCompliance(true);
     }).catch(() => { toast.error("Failed to load invoice"); nav("/invoices"); });
   }, [editId, isEdit, nav]);
 
@@ -151,6 +167,7 @@ export default function InvoiceForm() {
           price_type: it.price_type || "exclusive",
         })),
         notes,
+        ...compliance,
       };
       const r = isEdit
         ? await api.put(`/invoices/${editId}`, payload)
@@ -390,7 +407,86 @@ export default function InvoiceForm() {
         </table>
       </Card>
 
-      {/* Totals + Notes */}
+      {/* Compliance (RCM / Export / IRN / E-Way) — optional */}
+      <Card className="p-5 border-slate-200 rounded-md">
+        <button
+          className="w-full flex items-center justify-between"
+          onClick={() => setShowCompliance((v) => !v)}
+          data-testid="toggle-compliance"
+          type="button"
+        >
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Compliance (optional)</div>
+            <div className="text-sm text-slate-500 mt-1">Reverse charge, export details, IRN, E-Way Bill — only fill when applicable.</div>
+          </div>
+          <span className="text-xs text-blue-600">{showCompliance ? "Hide" : "Show"}</span>
+        </button>
+        {showCompliance && (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+            <label className="flex items-center gap-2 text-sm mt-6">
+              <input type="checkbox" checked={compliance.rcm}
+                     onChange={(e) => setCompliance({ ...compliance, rcm: e.target.checked })}
+                     data-testid="inv-rcm" />
+              <span>Reverse Charge (RCM)</span>
+            </label>
+            <div>
+              <Label>Export Type</Label>
+              <Select value={compliance.export_type || "__none__"} onValueChange={(v) => setCompliance({ ...compliance, export_type: v === "__none__" ? "" : v })}>
+                <SelectTrigger data-testid="inv-export-type"><SelectValue placeholder="Not an export" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Not an export</SelectItem>
+                  <SelectItem value="WPAY">Export with payment (WPAY)</SelectItem>
+                  <SelectItem value="WOPAY">Export without payment (WOPAY)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Shipping Bill No.</Label>
+              <Input value={compliance.shipping_bill_number}
+                     onChange={(e) => setCompliance({ ...compliance, shipping_bill_number: e.target.value })}
+                     data-testid="inv-sbnum" />
+            </div>
+            <div>
+              <Label>Shipping Bill Date</Label>
+              <Input type="date" value={compliance.shipping_bill_date}
+                     onChange={(e) => setCompliance({ ...compliance, shipping_bill_date: e.target.value })} />
+            </div>
+            <div>
+              <Label>Port Code</Label>
+              <Input value={compliance.port_code}
+                     onChange={(e) => setCompliance({ ...compliance, port_code: e.target.value.toUpperCase() })}
+                     data-testid="inv-port" placeholder="e.g. INMAA" />
+            </div>
+            <div className="md:col-span-2">
+              <Label>IRN (leave blank if not e-invoiced)</Label>
+              <Input value={compliance.irn}
+                     onChange={(e) => setCompliance({ ...compliance, irn: e.target.value })}
+                     data-testid="inv-irn" placeholder="Do not fabricate — copy from IRP response" />
+            </div>
+            <div>
+              <Label>IRN Ack No.</Label>
+              <Input value={compliance.irn_ack_no}
+                     onChange={(e) => setCompliance({ ...compliance, irn_ack_no: e.target.value })} />
+            </div>
+            <div>
+              <Label>IRN Ack Date</Label>
+              <Input type="date" value={compliance.irn_ack_date}
+                     onChange={(e) => setCompliance({ ...compliance, irn_ack_date: e.target.value })} />
+            </div>
+            <div>
+              <Label>E-Way Bill No.</Label>
+              <Input value={compliance.eway_bill_number}
+                     onChange={(e) => setCompliance({ ...compliance, eway_bill_number: e.target.value })}
+                     data-testid="inv-ewb" />
+            </div>
+            <div>
+              <Label>E-Way Bill Date</Label>
+              <Input type="date" value={compliance.eway_bill_date}
+                     onChange={(e) => setCompliance({ ...compliance, eway_bill_date: e.target.value })} />
+            </div>
+          </div>
+        )}
+      </Card>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="p-5 border-slate-200 rounded-md lg:col-span-2">
           <Label className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Notes / Terms</Label>

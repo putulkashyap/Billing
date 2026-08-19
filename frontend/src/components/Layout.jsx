@@ -2,7 +2,7 @@ import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { LogoSVG } from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
-import { LayoutDashboard, FileText, Users, Wallet, UserCog, LogOut, PlusCircle, FileMinus, Receipt, BarChart3, Truck, Boxes, Building2, FileSpreadsheet } from "lucide-react";
+import { LayoutDashboard, FileText, Users, Wallet, UserCog, LogOut, PlusCircle, FileMinus, Receipt, BarChart3, Truck, Boxes, Building2, FileSpreadsheet, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
@@ -15,6 +15,7 @@ const NAV = [
   { to: "/gst-register", label: "Sales Register", icon: FileSpreadsheet, testid: "nav-gst-register" },
   { to: "/purchase-register", label: "Purchase Register", icon: FileSpreadsheet, testid: "nav-purchase-register" },
   { to: "/gst-summary", label: "GST Summary", icon: BarChart3, testid: "nav-gst-summary" },
+  { to: "/gstr1-portal", label: "GSTR-1 Portal JSON", icon: ShieldCheck, testid: "nav-gstr1" },
   { to: "/customers", label: "Customers", icon: Users, testid: "nav-customers" },
   { to: "/vendors", label: "Vendors", icon: Truck, testid: "nav-vendors" },
   { to: "/hsn", label: "HSN / SAC", icon: Boxes, testid: "nav-hsn" },
