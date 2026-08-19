@@ -1,0 +1,23 @@
+{
+  "summary": "READ-ONLY regression smoke on PREVIEW backend after main agent prepared production_cleanup.py hand-off script. All 12 targeted backend checks pass. No DB writes performed. Confirms Preview-side application code was NOT accidentally altered. Only test-script deviation: the GSTR-1 dryrun endpoint is actually /api/reports/gstr1-portal-json?fp=MMYYYY&dryrun=true (not /api/gstr1/dryrun as the request phrased it). Behavior matches P4 spec: July 2026 returns HTTP 400 detail.status=BLOCKED with Place-of-Supply error for TE/2026-27/0001; August 2026 returns 200 status=PASS with both validations arrays.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_preview_regression_smoke.py",
+    "/app/test_reports/pytest/preview_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "No code changes were made by main agent this iteration (as expected). Verified via full smoke.",
+    "/app/scripts/production_cleanup.py is a hand-off artifact for Emergent Support to run against production DB; NOT executed here (correctly).",
+    "server.py at 2126 lines is nearing the 700-line split threshold; not blocking but a future refactor candidate."
+  ],
+  "updated_files": ["/app/backend/tests/test_preview_regression_smoke.py"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "not tested (per instruction)"},
+  "test_credentials": "hi@trayambak.in / Ranjita@1985 (from /app/memory/test_credentials.md, works on Preview)",
+  "seed_data_creation": "None. Read-only run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Preview DB currently holds exactly 1 invoice (TE/2026-27/0001, 2026-07-22, IGST 6742.37, grand_total 44200) and 0 credit notes. GSTR-1 dryrun endpoint path is /api/reports/gstr1-portal-json (query params fp, dryrun). Production DB cleanup is out-of-scope (separate DB, requires Emergent Support). Custom domain SSL (trayambak.in) is a platform/DNS concern, not testable from this pod.",
+  "rca of the issue": "Not applicable — production cleanup and SSL issues are infrastructure-level and outside pod scope. Preview app is fully healthy."
+}
