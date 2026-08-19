@@ -6,7 +6,7 @@ const COMPANY = {
   name: "TRAYAMBAK ENTERPRISE",
   proprietor: "Ranjita Rai",
   gstin: "24AMAPR1170Q1ZT",
-  address: "3rd Floor, C8-301, Akshar Pavilion, Vasna Bhayli Main Road, Opp Rosedale Heights, Vadodara, Gujarat - 391410",
+  address: "Akshar Pavilion, Vasna Bhayli Main Road, Opp Rosedale Heights, Vadodara, Gujarat - 391410",
   email: "hi@trayambak.in",
   website: "www.trayambak.in",
   bank: {

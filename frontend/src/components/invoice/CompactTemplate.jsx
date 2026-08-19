@@ -4,7 +4,7 @@ import { fmtINR, fmtINRWithSymbol, numberToWords } from "@/lib/gst";
 const COMPANY = {
   name: "TRAYAMBAK ENTERPRISE",
   gstin: "24AMAPR1170Q1ZT",
-  address: "3rd Floor, C8-301, Akshar Pavilion, Vasna Bhayli Main Road, Opp Rosedale Heights, Vadodara, Gujarat - 391410",
+  address: "Akshar Pavilion, Vasna Bhayli Main Road, Opp Rosedale Heights, Vadodara, Gujarat - 391410",
   email: "hi@trayambak.in",
   website: "www.trayambak.in",
   bank: { holder: "TRAYAMBAK ENTERPRISE", name: "IDFC FIRST Bank", branch: "Vadodara-Gotri", ac: "69315494820", type: "Current", ifsc: "IDFB0042392" },

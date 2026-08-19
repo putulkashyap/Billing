@@ -193,7 +193,7 @@ export default function Landing() {
                 <MapPin className="w-4 h-4 text-sky-400 shrink-0 mt-1" />
                 <div className="text-sm text-slate-300 leading-relaxed">
                   <div className="font-semibold text-white">TRAYAMBAK ENTERPRISE</div>
-                  3rd Floor, C8-301, Akshar Pavilion,<br />
+                  Akshar Pavilion,<br />
                   Vasna Bhayli Main Road,<br />
                   Opp Rosedale Heights,<br />
                   Vadodara, Gujarat — 391410
