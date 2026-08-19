@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -33,6 +33,22 @@ function Protected({ children }) {
 }
 
 function App() {
+  useEffect(() => {
+    const TITLE = "TRAYAMBAK ENTERPRISE — GST Billing & Corporate Procurement";
+    const DESC = "TRAYAMBAK ENTERPRISE — GST Billing, GeM tender fulfilment, and multi-category corporate procurement. Vadodara, Gujarat · GSTIN 24AMAPR1170Q1ZT.";
+    const setMeta = () => {
+      if (document.title !== TITLE) document.title = TITLE;
+      const m = document.querySelector('meta[name="description"]');
+      if (m && m.content !== DESC) m.setAttribute("content", DESC);
+    };
+    setMeta();
+    // Guard against platform scripts that rewrite <title> after load
+    const observer = new MutationObserver(setMeta);
+    const titleEl = document.querySelector("title");
+    if (titleEl) observer.observe(titleEl, { childList: true, characterData: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="App">
       <BrowserRouter>
