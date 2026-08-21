@@ -1,23 +1,20 @@
 #!/usr/bin/env bash
-# One-time LIVE production cleanup runner — Trayambak Enterprise, Aug 2026.
+# LIVE production cleanup runner — Trayambak Enterprise, Aug 2026.
 #
-# Prereqs (do these on the Emergent deployment console FIRST):
-#   1. Deploy the current /app/backend/server.py (contains the guarded
-#      /api/admin/prod-cleanup-2026-08 endpoint).
-#   2. Set env var on the Deployment:  PROD_CLEANUP_TOKEN=<any-random-string>
-#      (this is the confirmation token; unset it after cleanup).
-#   3. Redeploy so the env var is picked up.
+# Prereqs on Emergent Deployment:
+#   1. Deploy the latest /app/backend/server.py (with the guarded endpoint).
+#   2. Set env var:  PROD_CLEANUP_ENABLED=true   (boolean flag, NOT a secret)
+#   3. Redeploy so the flag is picked up.
 #
-# Usage:
+# Usage (from the pod OR the operator's machine):
+#   export TE_LIVE_URL='https://trayambak.in'
 #   export TE_ADMIN_EMAIL='hi@trayambak.in'
 #   export TE_ADMIN_PASSWORD='********'
-#   export PROD_CLEANUP_TOKEN='<same-string-you-set-on-deployment>'
-#   export TE_LIVE_URL='https://trayambak.in'   # or the emergent deploy URL
-#   ./run_prod_cleanup.sh dry-run                # inspect BEFORE state
-#   ./run_prod_cleanup.sh apply                  # actually apply cleanup
+#   ./run_prod_cleanup.sh dry-run     # inspect BEFORE state, no mutation
+#   ./run_prod_cleanup.sh apply       # actually apply the cleanup
 #
-# The script never prints the token or password. Backup snapshots are
-# written server-side into the `prod_cleanup_backups` collection.
+# The endpoint auto-expires after 2026-08-31 (safety net).
+# A BEFORE snapshot is written server-side into `prod_cleanup_backups`.
 
 set -euo pipefail
 
@@ -25,7 +22,6 @@ MODE="${1:-dry-run}"
 : "${TE_LIVE_URL:?TE_LIVE_URL is required}"
 : "${TE_ADMIN_EMAIL:?TE_ADMIN_EMAIL is required}"
 : "${TE_ADMIN_PASSWORD:?TE_ADMIN_PASSWORD is required}"
-: "${PROD_CLEANUP_TOKEN:?PROD_CLEANUP_TOKEN is required}"
 
 TOKEN=$(curl -s -X POST "$TE_LIVE_URL/api/auth/login" \
   -H "Content-Type: application/json" \
@@ -44,7 +40,7 @@ echo "=== Invoking cleanup (dry_run=$DRY_RUN) against $TE_LIVE_URL ==="
 curl -s -X POST "$TE_LIVE_URL/api/admin/prod-cleanup-2026-08" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"confirmation_token\":\"$PROD_CLEANUP_TOKEN\",\"dry_run\":$DRY_RUN}" \
+  -d "{\"dry_run\":$DRY_RUN}" \
   | python3 -m json.tool
 
 echo

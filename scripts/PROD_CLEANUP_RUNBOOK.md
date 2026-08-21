@@ -1,100 +1,65 @@
-# LIVE Production Cleanup — Deployment Runbook
+# LIVE Production Cleanup — Deployment Runbook (v2, boolean-flag gate)
 
-**Incident:** LIVE trayambak.in database contains 3 wrong invoices + 1 credit note; GSTIN validator was rejecting Tax Deductor GSTINs; Place-of-Supply not persisted on legacy invoices.
+**Incident:** LIVE `trayambak.in` DB out of sync — 3 wrong invoices + 1 wrong credit note + mismatched customer master + missing PoS on legacy records + GSTIN validator rejecting Tax Deductor GSTINs.
 
-**Status of the code fix in this pod (preview):** ✅ Verified against a LIVE-mirrored dataset. Dry-run + Apply + Idempotency + Auth guards all pass.
+**Pod status:** Code fixes complete + dress-rehearsal on preview passed against a byte-for-byte LIVE mirror. No LIVE mutation yet.
 
 ---
 
 ## What ships in this deploy
 
-1. **GSTIN validator (backend + frontend)** now accepts `Z` / `D` / `C` at position 14. Tax Deductor GSTINs like `20AAAGC0935R1DS` validate. `20AAPFC5310E2ZA` still valid too. Malformed GSTINs (e.g. `29ABCDE1234F1X5`) still rejected. Regression suite: `backend/tests/test_gstin_tds_tcs.py` (14 tests, all pass).
-2. **GST registration types** now include `Tax Deductor (TDS)`, `Tax Collector (TCS)`, `SEZ`. Backend validation extended.
-3. **One-time endpoint**: `POST /api/admin/prod-cleanup-2026-08` — admin-only, token-guarded, backup-first, idempotent, dry-run supported.
-4. **Runner script**: `scripts/run_prod_cleanup.sh` for you to invoke against LIVE from your machine (never puts secrets in chat).
+1. **GSTIN validator** (backend + frontend) — pos-14 accepts `Z` / `D` (TDS) / `C` (TCS). `20AAAGC0935R1DS` validates. 14 regression tests pass.
+2. **GST_REG_TYPES** — added Tax Deductor / Tax Collector / SEZ.
+3. **One-time cleanup endpoint** `POST /api/admin/prod-cleanup-2026-08` — admin JWT + boolean env-var flag `PROD_CLEANUP_ENABLED=true` + hard date-expiry after 2026-08-31 + backup-first + idempotent + dry-run.
+4. **Runner** `scripts/run_prod_cleanup.sh` (no secrets, admin creds only).
 
-The endpoint is **DISABLED by default** (returns 403) unless `PROD_CLEANUP_TOKEN` env var is set on the deployment.
-
----
-
-## Step-by-step
-
-### 1. Deploy the code
-Deploy the latest `/app/backend/server.py` + `/app/frontend/src/lib/india.js` to trayambak.in.
-
-### 2. Enable the cleanup endpoint on LIVE (temporary)
-On Emergent → Deployment → Environment Variables, add:
-```
-PROD_CLEANUP_TOKEN=<any-random-32-char-string-you-generate>
-```
-Redeploy so the env var is picked up.
-
-### 3. Dry-run from your machine
-```bash
-export TE_LIVE_URL='https://trayambak.in'
-export TE_ADMIN_EMAIL='hi@trayambak.in'
-export TE_ADMIN_PASSWORD='<your admin password>'
-export PROD_CLEANUP_TOKEN='<the same random string>'
-
-/app/scripts/run_prod_cleanup.sh dry-run
-```
-Confirm the BEFORE report shows:
-- 3 invoices (0001 wrong, 0002 correct-but-doomed, 0003 empty)
-- 1 credit note
-- counters `invoice_2026-27.seq >= 3`, `credit_note_2026-27.seq >= 1`
-
-### 4. Apply
-```bash
-/app/scripts/run_prod_cleanup.sh apply
-```
-Expected AFTER report:
-- `invoice_count: 1` — only `TE/2026-27/0001`
-  - `taxable_amount: 37457.63`, `igst: 6742.37`, `grand_total: 44200.0`
-  - `place_of_supply_code: "20"`, `place_of_supply_state: "Jharkhand"`
-  - `status: pending`, `amount_paid: 0`, `credits_applied: 0`, `balance: 44200.0`
-- `credit_note_count: 0`
-- counter `invoice_2026-27.seq = 1` (next invoice will be `TE/2026-27/0002`)
-- customer master GSTIN aligned to `20AAAGC0935R1DS`, `gst_reg_type=tax_deductor`
-- backup written to `prod_cleanup_backups` collection (Mongo)
-
-### 5. LIVE verification (via LIVE API only)
-```bash
-TOKEN=$(curl -s -X POST https://trayambak.in/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"'"$TE_ADMIN_EMAIL"'","password":"'"$TE_ADMIN_PASSWORD"'"}' \
-  | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
-
-curl -s "https://trayambak.in/api/invoices" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-curl -s "https://trayambak.in/api/credit-notes" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-curl -s "https://trayambak.in/api/reports/gst-sales-register?from=2026-07-01&to=2026-07-31" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-curl -s "https://trayambak.in/api/reports/gst-summary?from=2026-07-01&to=2026-07-31" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-curl -s "https://trayambak.in/api/reports/gstr1-portal-json?fp=072026&dryrun=true" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-```
-
-### 6. Disable + remove the endpoint
-Once you (and I) confirm LIVE is clean:
-1. **Remove** the `PROD_CLEANUP_TOKEN` env var from Emergent Deployment → Environment Variables.
-2. Redeploy — this alone disables the endpoint (returns 403).
-3. In the next code deploy, I'll strip the `/api/admin/prod-cleanup-2026-08` block out of `server.py` entirely.
-
-### 7. Rollback (if anything goes wrong)
-Every apply writes a full BEFORE snapshot into the `prod_cleanup_backups` MongoDB collection:
-```javascript
-// From a mongo shell attached to the LIVE database:
-db.prod_cleanup_backups.find().sort({timestamp: -1}).limit(1)
-```
-The document contains `.before.invoices`, `.before.credit_notes`, `.before.customers`, `.before.counters` — enough to restore by hand or by a one-off restore script.
+Endpoint returns **403** unless `PROD_CLEANUP_ENABLED=true` on the deployment.
 
 ---
 
-## Dress-rehearsal proof (against preview)
+## User steps (Emergent Deployment UI — cannot be done from pod)
 
-I mirrored the exact LIVE `/api/invoices` payload into preview, ran `dry-run` (returned "would-delete" list, no mutation), then `apply` (deleted 2 invoices + 1 CN, restored 0001 to canonical, aligned customer, reset counters), then invoked `apply` again which returned `already_clean` (idempotent). Bad-token/no-auth negative cases returned 403/401.
+### 1. Deploy Code
+Push `/app/backend/server.py` + `/app/frontend/src/lib/india.js` → Emergent → Deploy.
 
-Full API-verified AFTER state on preview:
-- `GET /api/invoices` → 1 record, correct values.
-- `GET /api/credit-notes` → 0.
-- `GET /api/reports/gst-sales-register` → 1 row, IGST ₹6,742.37, PoS 20/Jharkhand.
-- `GET /api/reports/gst-summary` → output IGST ₹6,742.37, CGST 0, SGST 0.
-- `GET /api/reports/gstr1-portal-json?fp=072026&dryrun=true` → `status: PASS`, no PoS-missing errors.
-- `GET /api/reports/gstr1-portal-json?fp=072026` → correct B2B block with `ctin=20AAAGC0935R1DS`, `pos=20`, `iamt=6742.37`, `val=44200.0`.
+### 2. Enable the flag
+Deployment → Environment Variables → add:
+```
+PROD_CLEANUP_ENABLED=true
+```
+Redeploy.
+
+### 3. Ping the pod
+Reply in chat: **"deployed, flag enabled"**. The agent will do dry-run + show it before applying.
+
+---
+
+## After LIVE cleanup succeeds
+
+### 9. Disable the endpoint
+Deployment → Environment Variables → remove `PROD_CLEANUP_ENABLED` (or set to `false`).
+Redeploy. Endpoint returns 403.
+
+### 12. Strip endpoint code
+Agent will delete the `/api/admin/prod-cleanup-2026-08` block from `server.py` in the follow-up commit; you deploy that final commit.
+
+Safety net: the endpoint auto-expires after **2026-08-31** even if the flag is left on.
+
+---
+
+## Rollback
+Every mutation writes a full BEFORE snapshot into the `prod_cleanup_backups` MongoDB collection. Look up the most recent doc; `before.invoices`, `before.credit_notes`, `before.customers`, `before.counters` contain the pre-mutation state.
+
+---
+
+## Dress-rehearsal proof (preview, LIVE-mirrored dataset)
+
+- Dry-run → correct BEFORE list, no mutation.
+- Apply → 1 canonical invoice, 0 CN, counters reset (`invoice_2026-27.seq=1`), customer master aligned to `20AAAGC0935R1DS` / `tax_deductor`.
+- 2nd apply → `already_clean` (idempotent).
+- No admin JWT → 401. Wrong role (n/a in this pod) or flag off → 403.
+- Downstream reports verified via API:
+  - `/api/reports/gst-sales-register` → 1 row, IGST ₹6,742.37, PoS 20.
+  - `/api/reports/gst-summary` → output IGST ₹6,742.37.
+  - `/api/reports/gstr1-portal-json?fp=072026&dryrun=true` → `status: PASS`.
+  - Live JSON: correct B2B block with `ctin=20AAAGC0935R1DS`, `pos=20`, `iamt=6742.37`, `val=44200.0`.

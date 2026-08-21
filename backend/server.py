@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
-import hmac
 import logging
 import uuid
 import bcrypt
@@ -16,7 +15,7 @@ import mimetypes
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import List, Optional, Literal
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from urllib.parse import quote
 
 ROOT_DIR = Path(__file__).parent
@@ -2194,7 +2193,6 @@ _CANONICAL_0001 = {
 
 
 class ProdCleanupIn(BaseModel):
-    confirmation_token: str
     dry_run: bool = False
 
 
@@ -2219,14 +2217,18 @@ def _is_canonical_0001(inv: dict) -> bool:
 
 @api.post("/admin/prod-cleanup-2026-08")
 async def prod_cleanup_2026_08(inp: ProdCleanupIn, user=Depends(require_admin)):
-    expected = os.environ.get("PROD_CLEANUP_TOKEN", "")
-    if not expected:
+    # Boolean feature flag on the deployment (NOT a secret; just an on/off switch).
+    # Unset by default => 403. Also auto-expires after 2026-08-31 as a safety net.
+    if os.environ.get("PROD_CLEANUP_ENABLED", "").strip().lower() not in ("1", "true", "yes", "on"):
         raise HTTPException(
             status_code=403,
-            detail="Cleanup endpoint disabled: PROD_CLEANUP_TOKEN not set on this deployment.",
+            detail="Cleanup endpoint disabled: PROD_CLEANUP_ENABLED not set to true on this deployment.",
         )
-    if not hmac.compare_digest(str(inp.confirmation_token or ""), expected):
-        raise HTTPException(status_code=403, detail="Invalid confirmation token.")
+    if datetime.now(timezone.utc).date() > date(2026, 8, 31):
+        raise HTTPException(
+            status_code=403,
+            detail="Cleanup endpoint expired after 2026-08-31 (safety net).",
+        )
 
     # ---------- Snapshot BEFORE ----------
     before_invoices = await db.invoices.find({}, {"_id": 0}).to_list(2000)
