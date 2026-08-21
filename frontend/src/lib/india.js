@@ -44,7 +44,8 @@ export const INDIAN_STATES = [
 export const STATE_BY_CODE = Object.fromEntries(INDIAN_STATES.map((s) => [s.code, s.name]));
 export const stateName = (code) => STATE_BY_CODE[String(code || "").padStart(2, "0")] || "";
 
-const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$/;
+// Position 14: 'Z' for regular, 'D' for Tax Deductor (TDS), 'C' for Tax Collector (TCS).
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}[ZDC]{1}[0-9A-Z]{1}$/;
 
 export const isValidGSTIN = (g) => {
   const s = String(g || "").trim().toUpperCase();
@@ -65,6 +66,9 @@ export const isValidPAN = (p) => {
 export const GST_REG_TYPES = [
   { value: "regular", label: "Regular" },
   { value: "composition", label: "Composition" },
+  { value: "tax_deductor", label: "Tax Deductor (TDS)" },
+  { value: "tax_collector", label: "Tax Collector (TCS)" },
+  { value: "sez", label: "SEZ" },
   { value: "unregistered", label: "Unregistered" },
   { value: "other", label: "Other" },
 ];

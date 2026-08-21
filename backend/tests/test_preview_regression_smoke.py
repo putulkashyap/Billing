@@ -9,8 +9,8 @@ import pytest
 import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://gst-tax-hub-2.preview.emergentagent.com").rstrip("/")
-ADMIN_EMAIL = "hi@trayambak.in"
-ADMIN_PASSWORD = "Ranjita@1985"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "hi@trayambak.in")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Ranjita@1985")
 
 
 @pytest.fixture(scope="module")

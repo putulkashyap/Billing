@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import hmac
 import logging
 import uuid
 import bcrypt
@@ -408,12 +409,13 @@ def gstin_state_code(gstin: str) -> str:
 
 def validate_gstin_format(gstin: str) -> bool:
     """Return True for a well-formed 15-char GSTIN (permissive check).
-    Format: 2 digit state + 10 char PAN + 1 entity + 1 default 'Z' + 1 checksum."""
+    Format: 2 digit state + 10 char PAN + 1 entity + 1 default 'Z' / 'D' (TDS) / 'C' (TCS) + 1 checksum.
+    Reference: GSTN spec — position 14 = 'Z' for regular, 'D' for tax deductor, 'C' for tax collector."""
     import re
     g = (gstin or "").strip().upper()
     if not g:
         return False
-    return bool(re.match(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$", g))
+    return bool(re.match(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}[ZDC]{1}[0-9A-Z]{1}$", g))
 
 
 def resolve_intra_state(customer: dict, place_of_supply_code: str, supplier_state_code: str = "24") -> bool:
@@ -615,9 +617,16 @@ def _normalize_customer_input(inp_dict: dict) -> dict:
 
 
 def _validate_gstin_for_party(gstin: str, gst_reg_type: str) -> None:
-    """Raise 400 if a registered party has an invalid GSTIN. Unregistered/other allowed empty."""
+    """Raise 400 if a registered party has an invalid GSTIN. Unregistered/other allowed empty.
+
+    Registered types that MUST carry a GSTIN:
+      regular, composition, tax_deductor (TDS), tax_collector (TCS), sez.
+    Position 14 of a TDS GSTIN is 'D', TCS is 'C', all others 'Z' — the
+    validator already accepts all three via validate_gstin_format().
+    """
     t = (gst_reg_type or "").lower()
-    if t in ("regular", "composition"):
+    registered = {"regular", "composition", "tax_deductor", "tax_collector", "sez"}
+    if t in registered:
         if not gstin:
             raise HTTPException(status_code=400, detail="GSTIN is required for a registered party.")
         if not validate_gstin_format(gstin):
@@ -2106,6 +2115,268 @@ async def whatsapp_reminder(iid: str, user=Depends(get_current_user)):
         "email": (inv.get("customer", {}) or {}).get("email", ""),
         "invoice_number": inv.get("invoice_number"),
         "message": msg,
+    }
+
+
+# =====================================================================
+# ONE-TIME PROD CLEANUP ENDPOINT — Trayambak Live Incident, Aug 2026
+# =====================================================================
+# Purpose:
+#   Remove the wrong invoices TE/2026-27/0002, TE/2026-27/0003 and the
+#   related credit note TE/CN/2026-27/0001 from the LIVE production
+#   database, restore TE/2026-27/0001 to its canonical values, align
+#   the customer master GSTIN with the verified Jharkhand Tax Deductor
+#   registration, and reset the counters so the next invoice becomes
+#   TE/2026-27/0002.
+#
+# Guard rails:
+#   - Admin JWT required (existing auth).
+#   - PROD_CLEANUP_TOKEN env var MUST be set on the target deployment
+#     (unset by default => endpoint returns 403). This is the
+#     "production environment guard": preview deployments won't have
+#     the token unless the operator deliberately sets it.
+#   - Body must include confirmation_token that matches env var exactly
+#     (constant-time compare).
+#   - Every invocation snapshots BEFORE state into
+#     `prod_cleanup_backups` collection.
+#   - Idempotent: if the DB is already in the canonical state, returns
+#     `already_clean` without mutating.
+#   - Supports dry_run=True to preview mutation without applying.
+#
+# Removal:
+#   After successful LIVE cleanup + verification, delete this block
+#   in the next deployment.
+# =====================================================================
+_TARGET_INVOICE = "TE/2026-27/0001"
+_INVOICES_TO_DELETE = ["TE/2026-27/0002", "TE/2026-27/0003"]
+_CREDIT_NOTES_TO_DELETE = ["TE/CN/2026-27/0001"]
+
+_CANONICAL_0001 = {
+    "invoice_date": "2026-07-22",
+    "customer": {
+        "name": "Chief Executive Officer",
+        "gstin": "20AAAGC0935R1DS",
+        "state": "Jharkhand",
+        "state_code": "20",
+        "address": "CANTONMENT BOARD OFFICE, RAMGARH CANTT., RAMGARH, JHARKHAND-829122",
+        "phone": "06553-222228",
+        "email": "ceoramgarhcantt@gmail.com",
+    },
+    "line_items": [{
+        "description": "Waste Container (Dustbin) with a Capacity of 10 liter",
+        "hsn": "3924",
+        "quantity": 100.0,
+        "unit": "Nos",
+        "rate": 442.0,
+        "discount": 0.0,
+        "tax_rate": 18.0,
+        "price_type": "inclusive",
+    }],
+    "subtotal": 44200.0,
+    "total_discount": 0.0,
+    "taxable_amount": 37457.63,
+    "cgst": 0.0,
+    "sgst": 0.0,
+    "igst": 6742.37,
+    "total_tax": 6742.37,
+    "grand_total": 44200.0,
+    "is_intra_state": False,
+    "place_of_supply_state": "Jharkhand",
+    "place_of_supply_code": "20",
+    "status": "pending",
+    "amount_paid": 0.0,
+    "credits_applied": 0.0,
+    "balance": 44200.0,
+    "payments": [],
+    "notes": "",
+    "rcm": False,
+}
+
+
+class ProdCleanupIn(BaseModel):
+    confirmation_token: str
+    dry_run: bool = False
+
+
+def _serialise_counter(doc):
+    d = dict(doc)
+    d["_id"] = str(d.get("_id", ""))
+    return d
+
+
+def _is_canonical_0001(inv: dict) -> bool:
+    if not inv:
+        return False
+    return (
+        abs(float(inv.get("grand_total", 0)) - 44200.0) < 0.01
+        and abs(float(inv.get("taxable_amount", 0)) - 37457.63) < 0.01
+        and abs(float(inv.get("igst", 0)) - 6742.37) < 0.01
+        and abs(float(inv.get("credits_applied", 0))) < 0.01
+        and (inv.get("place_of_supply_code") or "") == "20"
+        and (inv.get("status") or "") == "pending"
+    )
+
+
+@api.post("/admin/prod-cleanup-2026-08")
+async def prod_cleanup_2026_08(inp: ProdCleanupIn, user=Depends(require_admin)):
+    expected = os.environ.get("PROD_CLEANUP_TOKEN", "")
+    if not expected:
+        raise HTTPException(
+            status_code=403,
+            detail="Cleanup endpoint disabled: PROD_CLEANUP_TOKEN not set on this deployment.",
+        )
+    if not hmac.compare_digest(str(inp.confirmation_token or ""), expected):
+        raise HTTPException(status_code=403, detail="Invalid confirmation token.")
+
+    # ---------- Snapshot BEFORE ----------
+    before_invoices = await db.invoices.find({}, {"_id": 0}).to_list(2000)
+    before_credit_notes = await db.credit_notes.find({}, {"_id": 0}).to_list(2000)
+    before_customers = await db.customers.find({}, {"_id": 0}).to_list(2000)
+    before_counters = [_serialise_counter(c) async for c in db.counters.find({})]
+
+    backup_id = str(uuid.uuid4())
+    backup_doc = {
+        "id": backup_id,
+        "timestamp": now_iso(),
+        "invoked_by": user.get("id") if isinstance(user, dict) else None,
+        "dry_run": bool(inp.dry_run),
+        "before": {
+            "invoices": before_invoices,
+            "credit_notes": before_credit_notes,
+            "customers": before_customers,
+            "counters": before_counters,
+        },
+    }
+    await db.prod_cleanup_backups.insert_one(dict(backup_doc))
+
+    audit = [f"backup saved: {backup_id}"]
+    inv_nums = {i.get("invoice_number") for i in before_invoices}
+    cn_nums = {c.get("credit_note_number") for c in before_credit_notes}
+
+    inv_0001_before = next((i for i in before_invoices if i.get("invoke_number") == _TARGET_INVOICE
+                            or i.get("invoice_number") == _TARGET_INVOICE), None)
+    already_clean = (
+        inv_nums == {_TARGET_INVOICE}
+        and not cn_nums
+        and _is_canonical_0001(inv_0001_before)
+    )
+
+    if inp.dry_run:
+        return {
+            "status": "dry_run",
+            "backup_id": backup_id,
+            "already_clean": already_clean,
+            "would_delete_invoices": _INVOICES_TO_DELETE,
+            "would_delete_credit_notes": _CREDIT_NOTES_TO_DELETE,
+            "would_restore_invoice": _TARGET_INVOICE,
+            "before": {
+                "invoice_count": len(before_invoices),
+                "credit_note_count": len(before_credit_notes),
+                "invoices": [{
+                    "invoice_number": i.get("invoice_number"),
+                    "grand_total": i.get("grand_total"),
+                    "place_of_supply_code": i.get("place_of_supply_code"),
+                    "status": i.get("status"),
+                    "credits_applied": i.get("credits_applied"),
+                } for i in before_invoices],
+                "credit_notes": [c.get("credit_note_number") for c in before_credit_notes],
+                "counters": before_counters,
+            },
+        }
+
+    if already_clean:
+        await db.prod_cleanup_backups.update_one(
+            {"id": backup_id}, {"$set": {"audit": ["already_clean, no-op"]}}
+        )
+        return {"status": "already_clean", "backup_id": backup_id, "audit": audit}
+
+    # ---------- Mutations ----------
+    r_inv = await db.invoices.delete_many({"invoice_number": {"$in": _INVOICES_TO_DELETE}})
+    audit.append(f"deleted invoices: {r_inv.deleted_count} of {_INVOICES_TO_DELETE}")
+
+    r_cn = await db.credit_notes.delete_many({"credit_note_number": {"$in": _CREDIT_NOTES_TO_DELETE}})
+    audit.append(f"deleted credit notes: {r_cn.deleted_count} of {_CREDIT_NOTES_TO_DELETE}")
+
+    r_upd = await db.invoices.update_one(
+        {"invoice_number": _TARGET_INVOICE},
+        {"$set": _CANONICAL_0001, "$unset": {"cancelled_at": ""}},
+    )
+    audit.append(
+        f"restored {_TARGET_INVOICE}: matched={r_upd.matched_count} modified={r_upd.modified_count}"
+    )
+
+    # Customer master alignment (only touch the CEO Ramgarh record)
+    r_cust = await db.customers.update_one(
+        {"name": "Chief Executive Officer"},
+        {"$set": {
+            "gstin": "20AAAGC0935R1DS",
+            "gst_reg_type": "tax_deductor",
+            "customer_type": "gov",
+            "state": "Jharkhand",
+            "state_code": "20",
+            "billing_address": "CANTONMENT BOARD OFFICE, RAMGARH CANTT., RAMGARH, JHARKHAND-829122",
+            "shipping_address": "CANTONMENT BOARD OFFICE, RAMGARH CANTT., RAMGARH, JHARKHAND-829122",
+            "phone": "06553-222228",
+            "mobile": "06553-222228",
+            "email": "ceoramgarhcantt@gmail.com",
+            "updated_at": now_iso(),
+        }},
+    )
+    audit.append(f"customer master aligned: matched={r_cust.matched_count} modified={r_cust.modified_count}")
+
+    await db.counters.update_one({"_id": "invoice_2026-27"}, {"$set": {"seq": 1}}, upsert=True)
+    await db.counters.update_one({"_id": "credit_note_2026-27"}, {"$set": {"seq": 0}}, upsert=True)
+    audit.append("counters reset: invoice_2026-27.seq=1, credit_note_2026-27.seq=0")
+
+    # ---------- Snapshot AFTER ----------
+    after_invoices = await db.invoices.find({}, {"_id": 0}).to_list(2000)
+    after_credit_notes = await db.credit_notes.find({}, {"_id": 0}).to_list(2000)
+    after_customers = await db.customers.find({}, {"_id": 0}).to_list(2000)
+    after_counters = [_serialise_counter(c) async for c in db.counters.find({})]
+
+    await db.prod_cleanup_backups.update_one(
+        {"id": backup_id},
+        {"$set": {
+            "after": {
+                "invoices": after_invoices,
+                "credit_notes": after_credit_notes,
+                "customers": after_customers,
+                "counters": after_counters,
+            },
+            "audit": audit,
+        }},
+    )
+
+    return {
+        "status": "ok",
+        "backup_id": backup_id,
+        "audit": audit,
+        "after": {
+            "invoice_count": len(after_invoices),
+            "credit_note_count": len(after_credit_notes),
+            "invoices": [{
+                "invoice_number": i.get("invoice_number"),
+                "invoice_date": i.get("invoice_date"),
+                "grand_total": i.get("grand_total"),
+                "taxable_amount": i.get("taxable_amount"),
+                "cgst": i.get("cgst"),
+                "sgst": i.get("sgst"),
+                "igst": i.get("igst"),
+                "place_of_supply_code": i.get("place_of_supply_code"),
+                "place_of_supply_state": i.get("place_of_supply_state"),
+                "amount_paid": i.get("amount_paid"),
+                "credits_applied": i.get("credits_applied"),
+                "balance": i.get("balance"),
+                "status": i.get("status"),
+            } for i in after_invoices],
+            "counters": after_counters,
+            "customer_master": [{
+                "name": c.get("name"),
+                "gstin": c.get("gstin"),
+                "gst_reg_type": c.get("gst_reg_type"),
+                "state_code": c.get("state_code"),
+            } for c in after_customers],
+        },
     }
 
 

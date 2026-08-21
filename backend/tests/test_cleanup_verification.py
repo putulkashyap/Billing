@@ -6,7 +6,7 @@ import pytest
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 API = f"{BASE_URL}/api"
 ADMIN_EMAIL = "hi@trayambak.in"
-ADMIN_PASS = "Ranjita@1985"
+ADMIN_PASS = os.environ.get("TEST_ADMIN_PASSWORD", "Ranjita@1985")
 
 
 @pytest.fixture(scope="module")

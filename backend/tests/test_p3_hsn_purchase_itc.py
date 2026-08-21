@@ -20,7 +20,7 @@ def db():
 
 @pytest.fixture(scope="module")
 def hdr():
-    r = requests.post(f"{BASE}/auth/login", json={"email": "hi@trayambak.in", "password": "Ranjita@1985"})
+    r = requests.post(f"{BASE}/auth/login", json={"email": os.environ.get("TEST_ADMIN_EMAIL", "hi@trayambak.in"), "password": os.environ.get("TEST_ADMIN_PASSWORD", "Ranjita@1985")})
     assert r.status_code == 200
     return {"Authorization": f"Bearer {r.json()['token']}"}
 

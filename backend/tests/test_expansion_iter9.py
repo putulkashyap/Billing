@@ -15,8 +15,8 @@ from datetime import date, datetime, timezone
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://gst-tax-hub-2.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "hi@trayambak.in"
-ADMIN_PASSWORD = "Ranjita@1985"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "hi@trayambak.in")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Ranjita@1985")
 
 
 @pytest.fixture(scope="module")
@@ -35,14 +35,16 @@ def admin_client(admin_token):
 
 @pytest.fixture(scope="module")
 def staff_client(admin_client):
+    import secrets
+    staff_pw = os.environ.get("TEST_STAFF_PASSWORD") or f"Staff-{secrets.token_urlsafe(12)}!"
     ts = int(time.time())
     email = f"teststaff+{ts}@trayambak.in"
     r = admin_client.post(f"{API}/users", json={
-        "email": email, "name": "QA Staff", "password": "Staff@12345", "role": "staff"
+        "email": email, "name": "QA Staff", "password": staff_pw, "role": "staff"
     })
     assert r.status_code == 200, r.text
     uid = r.json()["id"]
-    login = requests.post(f"{API}/auth/login", json={"email": email, "password": "Staff@12345"})
+    login = requests.post(f"{API}/auth/login", json={"email": email, "password": staff_pw})
     assert login.status_code == 200
     s = requests.Session()
     s.headers.update({"Authorization": f"Bearer {login.json()['token']}", "Content-Type": "application/json"})

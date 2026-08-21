@@ -86,3 +86,30 @@ Build a full-stack, production-ready GST Billing & Account Reconciliation web ap
 - **P3**: E-invoice/IRN integration for turnover > threshold.
 - **P3**: Recurring invoices / subscription customers.
 - **P3**: Dark mode toggle.
+
+## 2026-08-21 · LIVE Production Incident (in-flight — requires user redeploy)
+Discovered that LIVE (`https://trayambak.in`) DB is out of sync with preview: 3 wrong invoices (0001 wrong totals + partially_paid; 0002 correct-but-doomed; 0003 empty), 1 credit note (CN/2026-27/0001), customer master GSTIN mismatched with invoice GSTIN, and GSTR-1 portal blocked with PoS-missing.
+
+Code fixes applied in this pod (need user deploy to LIVE):
+- ✅ **GSTIN validator** (backend `server.py` + frontend `india.js`) — pos-14 accepts `Z` / `D` (TDS) / `C` (TCS). `20AAAGC0935R1DS` now validates. Regressions: `backend/tests/test_gstin_tds_tcs.py` (14 tests pass).
+- ✅ **GST_REG_TYPES** — added `Tax Deductor (TDS)`, `Tax Collector (TCS)`, `SEZ`. `_validate_gstin_for_party` extended.
+- ✅ **One-time cleanup endpoint** `POST /api/admin/prod-cleanup-2026-08` — admin JWT + `PROD_CLEANUP_TOKEN` env-var guard + backup to `prod_cleanup_backups` collection + idempotent + dry-run. Endpoint returns 403 whenever the env var is unset (default). Tests: `backend/tests/test_prod_cleanup_endpoint.py`.
+- ✅ **Runbook + runner**: `/app/scripts/PROD_CLEANUP_RUNBOOK.md` + `/app/scripts/run_prod_cleanup.sh` — user runs against LIVE from their machine; never puts secrets in chat.
+
+Dress-rehearsal on preview (LIVE-mirrored dataset):
+- Dry-run → correct BEFORE report, no mutation.
+- Apply → 2 wrong invoices + 1 CN deleted, `TE/2026-27/0001` restored to canonical (₹44,200, IGST ₹6,742.37, PoS 20/Jharkhand, status pending), customer master aligned to `20AAAGC0935R1DS` / `tax_deductor`, counters reset (`invoice_2026-27.seq=1`, `credit_note_2026-27.seq=0`).
+- 2nd apply → `already_clean` (idempotent).
+- Bad token → 403; no admin JWT → 401.
+- Verified via API: `/api/invoices` (1), `/api/credit-notes` (0), `/api/reports/gst-sales-register` (1 row, IGST 6,742.37), `/api/reports/gst-summary` (output IGST 6,742.37), `/api/reports/gstr1-portal-json?fp=072026&dryrun=true` → `status: PASS`; live JSON produced correct B2B block with `ctin=20AAAGC0935R1DS`, `pos=20`.
+
+Handoff to user (pending):
+1. Deploy backend + frontend to LIVE.
+2. Set `PROD_CLEANUP_TOKEN=<random>` env var on Emergent deployment.
+3. Run `scripts/run_prod_cleanup.sh dry-run` then `apply` from their machine.
+4. Verify LIVE via curl (script does this).
+5. Remove `PROD_CLEANUP_TOKEN` env var + redeploy → endpoint auto-disables (403).
+6. In the next code deploy, strip the temporary endpoint block from `server.py`.
+
+## Freeze
+Feature freeze remains in effect. Only production-incident code fixes were applied this turn.

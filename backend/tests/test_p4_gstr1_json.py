@@ -265,7 +265,7 @@ def test_full_generator_all_sections():
 # ---------- End-to-end against live preview DB (read-only) ----------
 @pytest.fixture(scope="module")
 def hdr():
-    r = requests.post(f"{BASE}/auth/login", json={"email": "hi@trayambak.in", "password": "Ranjita@1985"})
+    r = requests.post(f"{BASE}/auth/login", json={"email": os.environ.get("TEST_ADMIN_EMAIL", "hi@trayambak.in"), "password": os.environ.get("TEST_ADMIN_PASSWORD", "Ranjita@1985")})
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
